@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EduPay | Teacher Portal</title>
+    <link rel="stylesheet" href="/css/styles.css">
+</head>
+
+<body>
+    <div class="dashboard">
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h2>Edu<span>Pay</span></h2>
+                <div class="user-role">Teacher Portal</div>
+            </div>
+            <nav class="sidebar-nav">
+                <div class="nav-section">
+                    <div class="nav-section-title">My Account</div>
+                    <div class="nav-item active" data-section="profile" onclick="switchSection('profile')">
+                        <span class="nav-icon">👤</span> My Profile
+                    </div>
+                </div>
+                <div class="nav-section">
+                    <div class="nav-section-title">Salary</div>
+                    <div class="nav-item" data-section="payslips" onclick="switchSection('payslips')">
+                        <span class="nav-icon">📄</span> My Payslips
+                    </div>
+                    <div class="nav-item" data-section="history" onclick="switchSection('history')">
+                        <span class="nav-icon">📊</span> Salary History
+                    </div>
+                </div>
+                <div class="nav-section">
+                    <div class="nav-section-title">System</div>
+                    <div class="nav-item" data-section="notifications"
+                        onclick="switchSection('notifications');loadNotifications();">
+                        <span class="nav-icon">🔔</span> Notifications
+                        <span class="nav-badge" id="notifBadge" style="display:none;">0</span>
+                    </div>
+                    <div class="nav-item" data-section="password" onclick="switchSection('password')">
+                        <span class="nav-icon">🔑</span> Change Password
+                    </div>
+                </div>
+            </nav>
+            <div class="sidebar-footer">
+                <button class="logout-btn" onclick="logout()">
+                    <span>🚪</span> Sign Out
+                </button>
+            </div>
+        </aside>
+
+        <main class="main-content">
+            <div class="top-bar">
+                <button class="mobile-menu-btn" onclick="toggleSidebar()">☰</button>
+                <h1 id="pageTitle">My Profile</h1>
+                <div class="top-bar-right">
+                    <div class="top-bar-user">
+                        <span class="user-full-name"></span>
+                        <div class="user-avatar"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="content-area">
+                <!-- Profile -->
+                <div id="profile" class="page-section active">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Personal Information</h3>
+                            <button class="btn btn-primary" id="editProfileBtn" onclick="toggleEditProfile()">✏️
+                                Edit</button>
+                        </div>
+                        <div class="card-body">
+                            <div id="profileView" class="profile-card">
+                                <div class="profile-field"><label>Full Name</label>
+                                    <div class="value" id="profName">-</div>
+                                </div>
+                                <div class="profile-field"><label>Employee ID</label>
+                                    <div class="value" id="profEmpId">-</div>
+                                </div>
+                                <div class="profile-field"><label>Position</label>
+                                    <div class="value" id="profPosition">-</div>
+                                </div>
+                                <div class="profile-field"><label>Salary Scale</label>
+                                    <div class="value" id="profScale">-</div>
+                                </div>
+                                <div class="profile-field"><label>Email</label>
+                                    <div class="value" id="profEmail">-</div>
+                                </div>
+                                <div class="profile-field"><label>Phone</label>
+                                    <div class="value" id="profPhone">-</div>
+                                </div>
+                                <div class="profile-field"><label>Date Joined</label>
+                                    <div class="value" id="profJoined">-</div>
+                                </div>
+                            </div>
+                            <div id="profileEdit" style="display:none;">
+                                <div class="form-grid">
+                                    <div class="form-group">
+                                        <label>Email</label>
+                                        <input type="email" id="editEmail" class="form-control">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Phone</label>
+                                        <input type="text" id="editPhone" class="form-control">
+                                    </div>
+                                </div>
+                                <div style="margin-top:12px; display:flex; gap:8px;">
+                                    <button class="btn btn-primary" onclick="saveProfile()">Save Changes</button>
+                                    <button class="btn btn-secondary" onclick="toggleEditProfile()">Cancel</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Salary Details</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="profile-card">
+                                <div class="profile-field"><label>Basic Salary</label>
+                                    <div class="value" id="profBasic">-</div>
+                                </div>
+                                <div class="profile-field"><label>Housing Allowance</label>
+                                    <div class="value" id="profHousing">-</div>
+                                </div>
+                                <div class="profile-field"><label>Transport Allowance</label>
+                                    <div class="value" id="profTransport">-</div>
+                                </div>
+                                <div class="profile-field"><label>Medical Allowance</label>
+                                    <div class="value" id="profMedical">-</div>
+                                </div>
+                                <div class="profile-field"><label>Tax Rate</label>
+                                    <div class="value" id="profTax">-</div>
+                                </div>
+                                <div class="profile-field"><label>NSSF Rate</label>
+                                    <div class="value" id="profNSSF">-</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Payslips -->
+                <div id="payslips" class="page-section">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>My Payslips</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>Period</th>
+                                            <th>Basic</th>
+                                            <th>Allowances</th>
+                                            <th>Deductions</th>
+                                            <th>Net Salary</th>
+                                            <th>Status</th>
+                                            <th>Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="payslipsBody"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Salary History -->
+                <div id="history" class="page-section">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Salary History</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>Period</th>
+                                            <th>Gross Salary</th>
+                                            <th>Deductions</th>
+                                            <th>Net Salary</th>
+                                            <th>Payment Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="historyBody"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Notifications -->
+                <div id="notifications" class="page-section">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Notifications</h3>
+                            <button class="btn btn-sm btn-secondary" onclick="markAllRead()">Mark All Read</button>
+                        </div>
+                        <div class="card-body" style="padding:0;">
+                            <div id="notificationsList"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Change Password -->
+                <div id="password" class="page-section">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Change Password</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="form-grid" style="max-width:500px;">
+                                <div class="form-group">
+                                    <label>Current Password</label>
+                                    <input type="password" id="currentPwd" class="form-control">
+                                </div>
+                                <div class="form-group">
+                                    <label>New Password</label>
+                                    <input type="password" id="newPwd" class="form-control"
+                                        placeholder="Min 6 characters">
+                                </div>
+                            </div>
+                            <button class="btn btn-primary mt-4" onclick="changePassword()">Update Password</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="/js/app.js"></script>
+    <script src="/js/teacher.js"></script>
+</body>
+
+</html>

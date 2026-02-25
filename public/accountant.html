@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EduPay | Accountant Dashboard</title>
+    <link rel="stylesheet" href="/css/styles.css">
+</head>
+
+<body>
+    <div class="dashboard">
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h2>Edu<span>Pay</span></h2>
+                <div class="user-role">Accountant Panel</div>
+            </div>
+            <nav class="sidebar-nav">
+                <div class="nav-section">
+                    <div class="nav-section-title">Overview</div>
+                    <div class="nav-item active" data-section="dashboard" onclick="switchSection('dashboard')">
+                        <span class="nav-icon">📊</span> Dashboard
+                    </div>
+                </div>
+                <div class="nav-section">
+                    <div class="nav-section-title">Payroll</div>
+                    <div class="nav-item" data-section="teachers" onclick="switchSection('teachers')">
+                        <span class="nav-icon">🎓</span> Teacher Records
+                    </div>
+                    <div class="nav-item" data-section="payroll" onclick="switchSection('payroll')">
+                        <span class="nav-icon">💳</span> Process Payroll
+                    </div>
+                    <div class="nav-item" data-section="payslips" onclick="switchSection('payslips')">
+                        <span class="nav-icon">📄</span> Payslips
+                    </div>
+                    <div class="nav-item" data-section="payment" onclick="switchSection('payment')">
+                        <span class="nav-icon">✅</span> Payment Status
+                    </div>
+                </div>
+                <div class="nav-section">
+                    <div class="nav-section-title">Reports</div>
+                    <div class="nav-item" data-section="reports" onclick="switchSection('reports')">
+                        <span class="nav-icon">📈</span> Financial Reports
+                    </div>
+                </div>
+            </nav>
+            <div class="sidebar-footer">
+                <button class="logout-btn" onclick="logout()">
+                    <span>🚪</span> Sign Out
+                </button>
+            </div>
+        </aside>
+
+        <main class="main-content">
+            <div class="top-bar">
+                <button class="mobile-menu-btn" onclick="toggleSidebar()">☰</button>
+                <h1 id="pageTitle">Dashboard</h1>
+                <div class="top-bar-right">
+                    <div class="top-bar-user">
+                        <span class="user-full-name"></span>
+                        <div class="user-avatar"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="content-area">
+                <!-- Dashboard -->
+                <div id="dashboard" class="page-section active">
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-icon green">🎓</div>
+                            <div class="stat-value" id="statTeachers">0</div>
+                            <div class="stat-label">Active Teachers</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon blue">📄</div>
+                            <div class="stat-value" id="statPayrolls">0</div>
+                            <div class="stat-label">Total Payrolls</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon orange">⏳</div>
+                            <div class="stat-value" id="statPending">0</div>
+                            <div class="stat-label">Pending Payrolls</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon red">💰</div>
+                            <div class="stat-value" id="statTotalPaid">0</div>
+                            <div class="stat-label">Total Paid Out</div>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Quick Actions</h3>
+                        </div>
+                        <div class="card-body" style="display:flex;gap:12px;flex-wrap:wrap;">
+                            <button class="btn btn-primary" onclick="switchSection('payroll')">💳 Process
+                                Payroll</button>
+                            <button class="btn btn-primary" onclick="switchSection('teachers')">🎓 View
+                                Teachers</button>
+                            <button class="btn btn-secondary" onclick="switchSection('reports')">📈 View
+                                Reports</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Teacher Records -->
+                <div id="teachers" class="page-section">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Teacher Records with Salary Details</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>ID</th>
+                                            <th>Name</th>
+                                            <th>Position</th>
+                                            <th>Scale</th>
+                                            <th>Basic Salary</th>
+                                            <th>Allowances</th>
+                                            <th>Deductions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="teacherRecordsBody"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Process Payroll -->
+                <div id="payroll" class="page-section">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Process Payroll</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="payroll-actions">
+                                <div class="form-group">
+                                    <label>Month</label>
+                                    <select id="payrollMonth" class="form-control">
+                                        <option value="1">January</option>
+                                        <option value="2">February</option>
+                                        <option value="3">March</option>
+                                        <option value="4">April</option>
+                                        <option value="5">May</option>
+                                        <option value="6">June</option>
+                                        <option value="7">July</option>
+                                        <option value="8">August</option>
+                                        <option value="9">September</option>
+                                        <option value="10">October</option>
+                                        <option value="11">November</option>
+                                        <option value="12">December</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label>Year</label>
+                                    <input type="number" id="payrollYear" class="form-control" value="2026"
+                                        style="width:120px;">
+                                </div>
+                                <button class="btn btn-primary" onclick="processPayroll()">🔄 Process Payroll</button>
+                            </div>
+                            <h4 style="margin-top:20px; margin-bottom:12px;">Payroll History</h4>
+                            <div class="table-responsive">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>Period</th>
+                                            <th>Teachers</th>
+                                            <th>Total Gross</th>
+                                            <th>Total Deductions</th>
+                                            <th>Total Net</th>
+                                            <th>Status</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="payrollHistoryBody"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Payslips -->
+                <div id="payslips" class="page-section">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Payslip Management</h3>
+                            <div style="display:flex;gap:8px;align-items:center;">
+                                <select id="payslipPayroll" class="form-control" style="width:auto;"
+                                    onchange="loadPayrollItems()">
+                                    <option value="">Select Payroll Period</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>Employee ID</th>
+                                            <th>Name</th>
+                                            <th>Gross</th>
+                                            <th>Deductions</th>
+                                            <th>Net Salary</th>
+                                            <th>Status</th>
+                                            <th>Payslip</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="payslipItemsBody"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Payment Status -->
+                <div id="payment" class="page-section">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Payment Status Management</h3>
+                            <select id="paymentPayroll" class="form-control" style="width:auto;"
+                                onchange="loadPaymentItems()">
+                                <option value="">Select Payroll Period</option>
+                            </select>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>Employee ID</th>
+                                            <th>Name</th>
+                                            <th>Net Salary</th>
+                                            <th>Status</th>
+                                            <th>Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="paymentItemsBody"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Reports -->
+                <div id="reports" class="page-section">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Financial Reports</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="payroll-actions">
+                                <div class="form-group">
+                                    <label>Filter by Month</label>
+                                    <select id="reportMonth" class="form-control">
+                                        <option value="">All</option>
+                                        <option value="1">January</option>
+                                        <option value="2">February</option>
+                                        <option value="3">March</option>
+                                        <option value="4">April</option>
+                                        <option value="5">May</option>
+                                        <option value="6">June</option>
+                                        <option value="7">July</option>
+                                        <option value="8">August</option>
+                                        <option value="9">September</option>
+                                        <option value="10">October</option>
+                                        <option value="11">November</option>
+                                        <option value="12">December</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label>Year</label>
+                                    <input type="number" id="reportYear" class="form-control" value="2026"
+                                        style="width:120px;">
+                                </div>
+                                <button class="btn btn-secondary" onclick="loadReports()">🔍 Filter</button>
+                            </div>
+                            <div class="table-responsive">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>Period</th>
+                                            <th>Teachers</th>
+                                            <th>Total Gross</th>
+                                            <th>Total Deductions</th>
+                                            <th>Total Net</th>
+                                            <th>Status</th>
+                                            <th>Export</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="reportsBody"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="/js/app.js"></script>
+    <script src="/js/accountant.js"></script>
+</body>
+
+</html>

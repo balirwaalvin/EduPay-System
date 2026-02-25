@@ -1,0 +1,26 @@
+# Dependencies
+node_modules/
+
+# Database (contains user passwords and sensitive data)
+data/
+*.db
+
+# Environment variables
+.env
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+
+# Backup files
+*.bak
+*.backup

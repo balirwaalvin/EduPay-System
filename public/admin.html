@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EduPay | Admin Dashboard</title>
+    <link rel="stylesheet" href="/css/styles.css">
+</head>
+
+<body>
+    <div class="dashboard">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h2>Edu<span>Pay</span></h2>
+                <div class="user-role">Admin Panel</div>
+            </div>
+            <nav class="sidebar-nav">
+                <div class="nav-section">
+                    <div class="nav-section-title">Overview</div>
+                    <div class="nav-item active" data-section="dashboard" onclick="switchSection('dashboard')">
+                        <span class="nav-icon">📊</span> Dashboard
+                    </div>
+                </div>
+                <div class="nav-section">
+                    <div class="nav-section-title">Management</div>
+                    <div class="nav-item" data-section="users" onclick="switchSection('users')">
+                        <span class="nav-icon">👥</span> User Management
+                    </div>
+                    <div class="nav-item" data-section="teachers" onclick="switchSection('teachers')">
+                        <span class="nav-icon">🎓</span> Teacher Management
+                    </div>
+                    <div class="nav-item" data-section="salary" onclick="switchSection('salary')">
+                        <span class="nav-icon">💰</span> Salary Structure
+                    </div>
+                </div>
+                <div class="nav-section">
+                    <div class="nav-section-title">System</div>
+                    <div class="nav-item" data-section="config" onclick="switchSection('config')">
+                        <span class="nav-icon">⚙️</span> Configuration
+                    </div>
+                    <div class="nav-item" data-section="reports" onclick="switchSection('reports')">
+                        <span class="nav-icon">📈</span> Reports
+                    </div>
+                    <div class="nav-item" data-section="audit" onclick="switchSection('audit')">
+                        <span class="nav-icon">📋</span> Audit Log
+                    </div>
+                    <div class="nav-item" data-section="security" onclick="switchSection('security')">
+                        <span class="nav-icon">🔒</span> Security
+                    </div>
+                </div>
+            </nav>
+            <div class="sidebar-footer">
+                <button class="logout-btn" onclick="logout()">
+                    <span>🚪</span> Sign Out
+                </button>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <div class="top-bar">
+                <button class="mobile-menu-btn" onclick="toggleSidebar()">☰</button>
+                <h1 id="pageTitle">Dashboard</h1>
+                <div class="top-bar-right">
+                    <div class="top-bar-user">
+                        <span class="user-full-name"></span>
+                        <div class="user-avatar"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="content-area">
+                <!-- Dashboard -->
+                <div id="dashboard" class="page-section active">
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-icon red">👥</div>
+                            <div class="stat-value" id="statUsers">0</div>
+                            <div class="stat-label">Total Users</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon green">🎓</div>
+                            <div class="stat-value" id="statTeachers">0</div>
+                            <div class="stat-label">Active Teachers</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon blue">📄</div>
+                            <div class="stat-value" id="statPayrolls">0</div>
+                            <div class="stat-label">Payroll Runs</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon orange">📊</div>
+                            <div class="stat-value" id="statLatestPayroll">-</div>
+                            <div class="stat-label">Latest Payroll</div>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Quick Actions</h3>
+                        </div>
+                        <div class="card-body" style="display:flex;gap:12px;flex-wrap:wrap;">
+                            <button class="btn btn-primary" onclick="switchSection('users')">👥 Manage Users</button>
+                            <button class="btn btn-primary" onclick="switchSection('teachers')">🎓 Manage
+                                Teachers</button>
+                            <button class="btn btn-primary" onclick="switchSection('salary')">💰 Salary
+                                Structure</button>
+                            <button class="btn btn-secondary" onclick="switchSection('config')">⚙️ System
+                                Config</button>
+                            <button class="btn btn-secondary" onclick="backupDatabase()">💾 Backup Database</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- User Management -->
+                <div id="users" class="page-section">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>User Management</h3>
+                            <button class="btn btn-primary" onclick="showCreateUserModal()">+ Add User</button>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>Username</th>
+                                            <th>Full Name</th>
+                                            <th>Role</th>
+                                            <th>Email</th>
+                                            <th>Status</th>
+                                            <th>Created</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="usersTableBody"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Teacher Management -->
+                <div id="teachers" class="page-section">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Teacher Management</h3>
+                            <button class="btn btn-primary" onclick="showCreateTeacherModal()">+ Add Teacher</button>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>Employee ID</th>
+                                            <th>Full Name</th>
+                                            <th>Position</th>
+                                            <th>Salary Scale</th>
+                                            <th>Phone</th>
+                                            <th>Email</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="teachersTableBody"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Salary Structure -->
+                <div id="salary" class="page-section">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Salary Structure Setup</h3>
+                            <button class="btn btn-primary" onclick="showSalaryModal()">+ Add Scale</button>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>Scale</th>
+                                            <th>Basic Salary</th>
+                                            <th>Housing</th>
+                                            <th>Transport</th>
+                                            <th>Medical</th>
+                                            <th>Other</th>
+                                            <th>Tax %</th>
+                                            <th>NSSF %</th>
+                                            <th>Loan</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="salaryTableBody"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Configuration -->
+                <div id="config" class="page-section">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>System Configuration</h3>
+                        </div>
+                        <div class="card-body">
+                            <form id="configForm" class="form-grid">
+                                <div class="form-group">
+                                    <label>School Name</label>
+                                    <input type="text" id="cfgSchoolName" class="form-control">
+                                </div>
+                                <div class="form-group">
+                                    <label>Currency</label>
+                                    <input type="text" id="cfgCurrency" class="form-control">
+                                </div>
+                                <div class="form-group">
+                                    <label>Payroll Period</label>
+                                    <select id="cfgPayrollPeriod" class="form-control">
+                                        <option value="monthly">Monthly</option>
+                                        <option value="termly">Termly</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label>NSSF Percentage</label>
+                                    <input type="number" id="cfgNSSF" class="form-control" step="0.1">
+                                </div>
+                                <div class="form-group">
+                                    <label>Tax Enabled</label>
+                                    <select id="cfgTaxEnabled" class="form-control">
+                                        <option value="true">Yes</option>
+                                        <option value="false">No</option>
+                                    </select>
+                                </div>
+                            </form>
+                            <div style="margin-top:16px; display:flex; gap:12px;">
+                                <button class="btn btn-primary" onclick="saveConfig()">Save Configuration</button>
+                                <button class="btn btn-secondary" onclick="backupDatabase()">💾 Backup Database</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Reports -->
+                <div id="reports" class="page-section">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Payroll Summary Reports</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>Period</th>
+                                            <th>Teachers</th>
+                                            <th>Total Gross</th>
+                                            <th>Total Deductions</th>
+                                            <th>Total Net</th>
+                                            <th>Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="reportsTableBody"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Audit Log -->
+                <div id="audit" class="page-section">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>System Audit Log</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>Date/Time</th>
+                                            <th>User</th>
+                                            <th>Action</th>
+                                            <th>Details</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="auditTableBody"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Security -->
+                <div id="security" class="page-section">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Security Control</h3>
+                        </div>
+                        <div class="card-body">
+                            <p style="color:var(--text-secondary);margin-bottom:16px;">Manage user accounts, reset
+                                passwords, and control access from the <a href="#"
+                                    onclick="switchSection('users');return false;" style="color:var(--primary);">User
+                                    Management</a> section. Use the toggle buttons to activate/deactivate accounts and
+                                the reset button to set new passwords.</p>
+                            <div class="card">
+                                <div class="card-header">
+                                    <h3>Change Your Password</h3>
+                                </div>
+                                <div class="card-body">
+                                    <div class="form-grid">
+                                        <div class="form-group">
+                                            <label>Current Password</label>
+                                            <input type="password" id="currentPwd" class="form-control">
+                                        </div>
+                                        <div class="form-group">
+                                            <label>New Password</label>
+                                            <input type="password" id="newPwd" class="form-control">
+                                        </div>
+                                    </div>
+                                    <button class="btn btn-primary mt-2" onclick="changePassword()">Update
+                                        Password</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Create/Edit User Modal -->
+    <div id="userModal" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 id="userModalTitle">Add New User</h3>
+                <button class="modal-close" onclick="closeModal('userModal')">✕</button>
+            </div>
+            <div class="modal-body">
+                <form id="userForm">
+                    <input type="hidden" id="editUserId">
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label>Full Name *</label>
+                            <input type="text" id="userFullName" class="form-control" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Username *</label>
+                            <input type="text" id="userUsername" class="form-control" required>
+                        </div>
+                        <div class="form-group" id="passwordGroup">
+                            <label>Password *</label>
+                            <input type="password" id="userPassword" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label>Role *</label>
+                            <select id="userRole" class="form-control">
+                                <option value="accountant">Accountant</option>
+                                <option value="teacher">Teacher</option>
+                                <option value="admin">Admin</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Email</label>
+                            <input type="email" id="userEmail" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label>Phone</label>
+                            <input type="text" id="userPhone" class="form-control">
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('userModal')">Cancel</button>
+                <button class="btn btn-primary" onclick="saveUser()">Save User</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create/Edit Teacher Modal -->
+    <div id="teacherModal" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 id="teacherModalTitle">Add New Teacher</h3>
+                <button class="modal-close" onclick="closeModal('teacherModal')">✕</button>
+            </div>
+            <div class="modal-body">
+                <form id="teacherForm">
+                    <input type="hidden" id="editTeacherId">
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label>Full Name *</label>
+                            <input type="text" id="teacherFullName" class="form-control" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Position</label>
+                            <input type="text" id="teacherPosition" class="form-control"
+                                placeholder="e.g. Senior Teacher">
+                        </div>
+                        <div class="form-group">
+                            <label>Salary Scale *</label>
+                            <select id="teacherSalaryScale" class="form-control"></select>
+                        </div>
+                        <div class="form-group">
+                            <label>Email</label>
+                            <input type="email" id="teacherEmail" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label>Phone</label>
+                            <input type="text" id="teacherPhone" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label>Date Joined</label>
+                            <input type="date" id="teacherDateJoined" class="form-control">
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('teacherModal')">Cancel</button>
+                <button class="btn btn-primary" onclick="saveTeacher()">Save Teacher</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Salary Structure Modal -->
+    <div id="salaryModal" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>Salary Structure</h3>
+                <button class="modal-close" onclick="closeModal('salaryModal')">✕</button>
+            </div>
+            <div class="modal-body">
+                <form id="salaryForm">
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label>Salary Scale Name *</label>
+                            <input type="text" id="salaryScale" class="form-control" placeholder="e.g. Scale_6"
+                                required>
+                        </div>
+                        <div class="form-group">
+                            <label>Basic Salary *</label>
+                            <input type="number" id="salaryBasic" class="form-control" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Housing Allowance</label>
+                            <input type="number" id="salaryHousing" class="form-control" value="0">
+                        </div>
+                        <div class="form-group">
+                            <label>Transport Allowance</label>
+                            <input type="number" id="salaryTransport" class="form-control" value="0">
+                        </div>
+                        <div class="form-group">
+                            <label>Medical Allowance</label>
+                            <input type="number" id="salaryMedical" class="form-control" value="0">
+                        </div>
+                        <div class="form-group">
+                            <label>Other Allowance</label>
+                            <input type="number" id="salaryOther" class="form-control" value="0">
+                        </div>
+                        <div class="form-group">
+                            <label>Tax Percentage (%)</label>
+                            <input type="number" id="salaryTax" class="form-control" step="0.1" value="0">
+                        </div>
+                        <div class="form-group">
+                            <label>NSSF Percentage (%)</label>
+                            <input type="number" id="salaryNSSF" class="form-control" step="0.1" value="5">
+                        </div>
+                        <div class="form-group">
+                            <label>Loan Deduction</label>
+                            <input type="number" id="salaryLoan" class="form-control" value="0">
+                        </div>
+                        <div class="form-group">
+                            <label>Other Deduction</label>
+                            <input type="number" id="salaryOtherDed" class="form-control" value="0">
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('salaryModal')">Cancel</button>
+                <button class="btn btn-primary" onclick="saveSalaryStructure()">Save Structure</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Reset Password Modal -->
+    <div id="resetPwdModal" class="modal-overlay">
+        <div class="modal" style="max-width:400px;">
+            <div class="modal-header">
+                <h3>Reset Password</h3>
+                <button class="modal-close" onclick="closeModal('resetPwdModal')">✕</button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="resetPwdUserId">
+                <div class="form-group">
+                    <label>New Password</label>
+                    <input type="password" id="resetPwdValue" class="form-control" placeholder="Min 6 characters">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('resetPwdModal')">Cancel</button>
+                <button class="btn btn-primary" onclick="resetPassword()">Reset Password</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/app.js"></script>
+    <script src="/js/admin.js"></script>
+</body>
+
+</html>
