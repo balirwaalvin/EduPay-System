@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const path = require('path');
 const cors = require('cors');
@@ -31,9 +32,9 @@ app.get('/accountant', (req, res) => res.sendFile(path.join(__dirname, '..', 'pu
 app.get('/teacher-portal', (req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'teacher.html')));
 
 // Start server
-function start() {
+async function start() {
     try {
-        initDatabase();
+        await initDatabase();
         app.listen(PORT, () => {
             console.log(`\n  ╔══════════════════════════════════════════╗`);
             console.log(`  ║   EduPay - School Payroll System          ║`);

@@ -6,7 +6,7 @@ const { getDb } = require('../database');
 const { authenticateToken, logAudit, JWT_SECRET } = require('../middleware');
 
 // POST /api/auth/login
-router.post('/login', (req, res) => {
+router.post('/login', async (req, res) => {
     try {
         const { username, password } = req.body;
         if (!username || !password) {
@@ -14,7 +14,8 @@ router.post('/login', (req, res) => {
         }
 
         const db = getDb();
-        const user = db.prepare("SELECT * FROM users WHERE username = ?").get(username);
+        const { rows } = await db.query("SELECT * FROM users WHERE username = $1", [username]);
+        const user = rows[0];
         if (!user) {
             return res.status(401).json({ error: 'Invalid username or password.' });
         }
@@ -54,7 +55,7 @@ router.post('/login', (req, res) => {
 });
 
 // POST /api/auth/change-password
-router.post('/change-password', authenticateToken, (req, res) => {
+router.post('/change-password', authenticateToken, async (req, res) => {
     try {
         const { current_password, new_password } = req.body;
         if (!current_password || !new_password) {
@@ -66,7 +67,8 @@ router.post('/change-password', authenticateToken, (req, res) => {
         }
 
         const db = getDb();
-        const row = db.prepare("SELECT password FROM users WHERE id = ?").get(req.user.id);
+        const { rows } = await db.query("SELECT password FROM users WHERE id = $1", [req.user.id]);
+        const row = rows[0];
         if (!row) {
             return res.status(404).json({ error: 'User not found.' });
         }
@@ -76,8 +78,10 @@ router.post('/change-password', authenticateToken, (req, res) => {
         }
 
         const newHash = bcrypt.hashSync(new_password, 10);
-        db.prepare("UPDATE users SET password = ?, must_change_password = 0, updated_at = datetime('now') WHERE id = ?")
-          .run(newHash, req.user.id);
+        await db.query(
+            "UPDATE users SET password = $1, must_change_password = 0, updated_at = NOW() WHERE id = $2",
+            [newHash, req.user.id]
+        );
 
         logAudit(db, req.user.id, req.user.username, 'CHANGE_PASSWORD', 'Password changed', req.ip);
 

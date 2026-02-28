@@ -26,9 +26,10 @@ function authorizeRoles(...roles) {
 }
 
 function logAudit(db, userId, username, action, details, ip) {
-    db.prepare(
-        "INSERT INTO audit_log (user_id, username, action, details, ip_address) VALUES (?, ?, ?, ?, ?)"
-    ).run(userId, username, action, details, ip || '');
+    db.query(
+        "INSERT INTO audit_log (user_id, username, action, details, ip_address) VALUES ($1, $2, $3, $4, $5)",
+        [userId, username, action, details, ip || '']
+    ).catch(err => console.error('Audit log error:', err));
 }
 
 module.exports = { authenticateToken, authorizeRoles, logAudit, JWT_SECRET };

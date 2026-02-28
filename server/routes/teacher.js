@@ -8,77 +8,72 @@ const PDFDocument = require('pdfkit');
 router.use(authenticateToken, authorizeRoles('teacher'));
 
 // GET /api/teacher/profile
-router.get('/profile', (req, res) => {
+router.get('/profile', async (req, res) => {
     try {
         const db = getDb();
-        const profile = db.prepare(`
-      SELECT t.*, s.basic_salary, s.housing_allowance, s.transport_allowance, s.medical_allowance,
-             s.other_allowance, s.tax_percentage, s.nssf_percentage
-      FROM teachers t
-      LEFT JOIN salary_structures s ON t.salary_scale = s.salary_scale
-      WHERE t.user_id = ?
-    `).get(req.user.id);
+        const { rows: [profile] } = await db.query(`
+            SELECT t.*, s.basic_salary, s.housing_allowance, s.transport_allowance, s.medical_allowance,
+                   s.other_allowance, s.tax_percentage, s.nssf_percentage
+            FROM teachers t
+            LEFT JOIN salary_structures s ON t.salary_scale = s.salary_scale
+            WHERE t.user_id = $1
+        `, [req.user.id]);
         if (!profile) return res.status(404).json({ error: 'Teacher profile not found.' });
         res.json(profile);
-    } catch (err) {
-        res.status(500).json({ error: 'Failed to fetch profile.' });
-    }
+    } catch (err) { res.status(500).json({ error: 'Failed to fetch profile.' }); }
 });
 
 // PUT /api/teacher/profile
-router.put('/profile', (req, res) => {
+router.put('/profile', async (req, res) => {
     try {
         const { phone, email } = req.body;
         const db = getDb();
-        db.prepare(
-            "UPDATE teachers SET phone = COALESCE(?, phone), email = COALESCE(?, email), updated_at = datetime('now') WHERE user_id = ?"
-        ).run(phone || null, email || null, req.user.id);
-        db.prepare(
-            "UPDATE users SET phone = COALESCE(?, phone), email = COALESCE(?, email), updated_at = datetime('now') WHERE id = ?"
-        ).run(phone || null, email || null, req.user.id);
+        await db.query(
+            "UPDATE teachers SET phone=COALESCE($1,phone), email=COALESCE($2,email), updated_at=NOW() WHERE user_id=$3",
+            [phone || null, email || null, req.user.id]
+        );
+        await db.query(
+            "UPDATE users SET phone=COALESCE($1,phone), email=COALESCE($2,email), updated_at=NOW() WHERE id=$3",
+            [phone || null, email || null, req.user.id]
+        );
         res.json({ message: 'Profile updated successfully.' });
-    } catch (err) {
-        res.status(500).json({ error: 'Failed to update profile.' });
-    }
+    } catch (err) { res.status(500).json({ error: 'Failed to update profile.' }); }
 });
 
 // GET /api/teacher/payslips
-router.get('/payslips', (req, res) => {
+router.get('/payslips', async (req, res) => {
     try {
         const db = getDb();
-        const teacher = db.prepare("SELECT id FROM teachers WHERE user_id = ?").get(req.user.id);
+        const { rows: [teacher] } = await db.query("SELECT id FROM teachers WHERE user_id = $1", [req.user.id]);
         if (!teacher) return res.status(404).json({ error: 'Teacher not found.' });
-        const payslips = db.prepare(`
-      SELECT pi.*, p.month, p.year, p.status as payroll_status
-      FROM payroll_items pi
-      JOIN payroll p ON pi.payroll_id = p.id
-      WHERE pi.teacher_id = ? AND p.status IN ('approved', 'paid')
-      ORDER BY p.year DESC, p.month DESC
-    `).all(teacher.id);
-        res.json(payslips);
-    } catch (err) {
-        res.status(500).json({ error: 'Failed to fetch payslips.' });
-    }
+        const { rows } = await db.query(`
+            SELECT pi.*, p.month, p.year, p.status as payroll_status
+            FROM payroll_items pi
+            JOIN payroll p ON pi.payroll_id = p.id
+            WHERE pi.teacher_id = $1 AND p.status IN ('approved', 'paid')
+            ORDER BY p.year DESC, p.month DESC
+        `, [teacher.id]);
+        res.json(rows);
+    } catch (err) { res.status(500).json({ error: 'Failed to fetch payslips.' }); }
 });
 
 // GET /api/teacher/payslip/:id/pdf
-router.get('/payslip/:id/pdf', (req, res) => {
+router.get('/payslip/:id/pdf', async (req, res) => {
     try {
         const db = getDb();
-        const teacher = db.prepare("SELECT id FROM teachers WHERE user_id = ?").get(req.user.id);
+        const { rows: [teacher] } = await db.query("SELECT id FROM teachers WHERE user_id = $1", [req.user.id]);
         if (!teacher) return res.status(404).json({ error: 'Teacher not found.' });
 
-        const item = db.prepare(`
-      SELECT pi.*, t.full_name, t.employee_id, t.position, t.salary_scale, p.month, p.year
-      FROM payroll_items pi
-      JOIN teachers t ON pi.teacher_id = t.id
-      JOIN payroll p ON pi.payroll_id = p.id
-      WHERE pi.id = ? AND pi.teacher_id = ?
-    `).get(req.params.id, teacher.id);
-
+        const { rows: [item] } = await db.query(`
+            SELECT pi.*, t.full_name, t.employee_id, t.position, t.salary_scale, p.month, p.year
+            FROM payroll_items pi
+            JOIN teachers t ON pi.teacher_id = t.id
+            JOIN payroll p ON pi.payroll_id = p.id
+            WHERE pi.id = $1 AND pi.teacher_id = $2
+        `, [req.params.id, teacher.id]);
         if (!item) return res.status(404).json({ error: 'Payslip not found.' });
 
-        const configRows = db.prepare("SELECT config_key, config_value FROM system_config").all();
+        const { rows: configRows } = await db.query("SELECT config_key, config_value FROM system_config");
         const configs = {};
         configRows.forEach(c => { configs[c.config_key] = c.config_value; });
         const schoolName = configs.school_name || 'EduPay School';
@@ -105,7 +100,6 @@ router.get('/payslip/:id/pdf', (req, res) => {
         doc.text(`Payment Status: ${item.payment_status}`, 350, infoY + 36);
 
         let tableY = infoY + 70;
-
         doc.fontSize(12).fillColor('#DC2626').text('EARNINGS', 50, tableY);
         tableY += 20;
         doc.fontSize(9).fillColor('#000');
@@ -160,58 +154,51 @@ router.get('/payslip/:id/pdf', (req, res) => {
 });
 
 // GET /api/teacher/salary-history
-router.get('/salary-history', (req, res) => {
+router.get('/salary-history', async (req, res) => {
     try {
         const db = getDb();
-        const teacher = db.prepare("SELECT id FROM teachers WHERE user_id = ?").get(req.user.id);
+        const { rows: [teacher] } = await db.query("SELECT id FROM teachers WHERE user_id = $1", [req.user.id]);
         if (!teacher) return res.status(404).json({ error: 'Teacher not found.' });
-        const history = db.prepare(`
-      SELECT pi.net_salary, pi.gross_salary, pi.total_deductions, pi.payment_status, pi.created_at,
-             p.month, p.year, p.status as payroll_status
-      FROM payroll_items pi
-      JOIN payroll p ON pi.payroll_id = p.id
-      WHERE pi.teacher_id = ?
-      ORDER BY p.year DESC, p.month DESC
-    `).all(teacher.id);
-        res.json(history);
-    } catch (err) {
-        res.status(500).json({ error: 'Failed to fetch salary history.' });
-    }
+        const { rows } = await db.query(`
+            SELECT pi.net_salary, pi.gross_salary, pi.total_deductions, pi.payment_status, pi.created_at,
+                   p.month, p.year, p.status as payroll_status
+            FROM payroll_items pi
+            JOIN payroll p ON pi.payroll_id = p.id
+            WHERE pi.teacher_id = $1
+            ORDER BY p.year DESC, p.month DESC
+        `, [teacher.id]);
+        res.json(rows);
+    } catch (err) { res.status(500).json({ error: 'Failed to fetch salary history.' }); }
 });
 
 // GET /api/teacher/notifications
-router.get('/notifications', (req, res) => {
+router.get('/notifications', async (req, res) => {
     try {
         const db = getDb();
-        const notifs = db.prepare(
-            "SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 50"
-        ).all(req.user.id);
-        res.json(notifs);
-    } catch (err) {
-        res.status(500).json({ error: 'Failed to fetch notifications.' });
-    }
+        const { rows } = await db.query(
+            "SELECT * FROM notifications WHERE user_id = $1 ORDER BY created_at DESC LIMIT 50",
+            [req.user.id]
+        );
+        res.json(rows);
+    } catch (err) { res.status(500).json({ error: 'Failed to fetch notifications.' }); }
 });
 
 // PUT /api/teacher/notifications/:id/read
-router.put('/notifications/:id/read', (req, res) => {
+router.put('/notifications/:id/read', async (req, res) => {
     try {
         const db = getDb();
-        db.prepare("UPDATE notifications SET is_read = 1 WHERE id = ? AND user_id = ?").run(req.params.id, req.user.id);
+        await db.query("UPDATE notifications SET is_read = true WHERE id = $1 AND user_id = $2", [req.params.id, req.user.id]);
         res.json({ message: 'Notification marked as read.' });
-    } catch (err) {
-        res.status(500).json({ error: 'Failed to update notification.' });
-    }
+    } catch (err) { res.status(500).json({ error: 'Failed to update notification.' }); }
 });
 
 // PUT /api/teacher/notifications/read-all
-router.put('/notifications/read-all', (req, res) => {
+router.put('/notifications/read-all', async (req, res) => {
     try {
         const db = getDb();
-        db.prepare("UPDATE notifications SET is_read = 1 WHERE user_id = ?").run(req.user.id);
+        await db.query("UPDATE notifications SET is_read = true WHERE user_id = $1", [req.user.id]);
         res.json({ message: 'All notifications marked as read.' });
-    } catch (err) {
-        res.status(500).json({ error: 'Failed to update notifications.' });
-    }
+    } catch (err) { res.status(500).json({ error: 'Failed to update notifications.' }); }
 });
 
 module.exports = router;

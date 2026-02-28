@@ -10,121 +10,121 @@ router.use(authenticateToken, authorizeRoles('accountant', 'admin'));
 
 // ============ TEACHER RECORDS ============
 
-// GET /api/accountant/teachers
-router.get('/teachers', (req, res) => {
+router.get('/teachers', async (req, res) => {
     try {
         const db = getDb();
-        const teachers = db.prepare(`
-      SELECT t.*, s.basic_salary, s.housing_allowance, s.transport_allowance, s.medical_allowance,
-             s.other_allowance, s.tax_percentage, s.nssf_percentage, s.loan_deduction, s.other_deduction
-      FROM teachers t
-      LEFT JOIN salary_structures s ON t.salary_scale = s.salary_scale
-      WHERE t.is_active = 1
-      ORDER BY t.full_name
-    `).all();
-        res.json(teachers);
-    } catch (err) {
-        res.status(500).json({ error: 'Failed to fetch teacher records.' });
-    }
+        const { rows } = await db.query(`
+            SELECT t.*, s.basic_salary, s.housing_allowance, s.transport_allowance, s.medical_allowance,
+                   s.other_allowance, s.tax_percentage, s.nssf_percentage, s.loan_deduction, s.other_deduction
+            FROM teachers t
+            LEFT JOIN salary_structures s ON t.salary_scale = s.salary_scale
+            WHERE t.is_active = true
+            ORDER BY t.full_name
+        `);
+        res.json(rows);
+    } catch (err) { res.status(500).json({ error: 'Failed to fetch teacher records.' }); }
 });
 
 // ============ PAYROLL PROCESSING ============
 
-// GET /api/accountant/payroll
-router.get('/payroll', (req, res) => {
+router.get('/payroll', async (req, res) => {
     try {
         const db = getDb();
-        const rows = db.prepare(`
-      SELECT p.*,
-        (SELECT COUNT(*) FROM payroll_items WHERE payroll_id = p.id) as teacher_count,
-        (SELECT full_name FROM users WHERE id = p.processed_by) as processed_by_name,
-        (SELECT full_name FROM users WHERE id = p.approved_by) as approved_by_name
-      FROM payroll p ORDER BY p.year DESC, p.month DESC
-    `).all();
+        const { rows } = await db.query(`
+            SELECT p.*,
+                (SELECT COUNT(*) FROM payroll_items WHERE payroll_id = p.id) as teacher_count,
+                (SELECT full_name FROM users WHERE id = p.processed_by) as processed_by_name,
+                (SELECT full_name FROM users WHERE id = p.approved_by) as approved_by_name
+            FROM payroll p ORDER BY p.year DESC, p.month DESC
+        `);
         res.json(rows);
-    } catch (err) {
-        res.status(500).json({ error: 'Failed to fetch payrolls.' });
-    }
+    } catch (err) { res.status(500).json({ error: 'Failed to fetch payrolls.' }); }
 });
 
-// POST /api/accountant/payroll/process
-router.post('/payroll/process', (req, res) => {
+router.post('/payroll/process', async (req, res) => {
+    const db = getDb();
+    const client = await db.connect();
     try {
         const { month, year } = req.body;
-        if (!month || !year) {
+        if (!month || !year)
             return res.status(400).json({ error: 'Month and year are required.' });
-        }
 
-        const db = getDb();
-
-        // Check if payroll already exists for this month/year
-        const existing = db.prepare("SELECT id, status FROM payroll WHERE month = ? AND year = ?").get(month, year);
-        if (existing) {
+        // Check for existing payroll
+        const { rows: existRows } = await client.query(
+            "SELECT id, status FROM payroll WHERE month = $1 AND year = $2", [month, year]
+        );
+        if (existRows.length) {
+            const existing = existRows[0];
             if (existing.status === 'approved' || existing.status === 'paid') {
                 return res.status(400).json({ error: `Payroll for ${month}/${year} is already ${existing.status}.` });
             }
-            // Delete existing draft/processed payroll
-            db.prepare("DELETE FROM payroll_items WHERE payroll_id = ?").run(existing.id);
-            db.prepare("DELETE FROM payroll WHERE id = ?").run(existing.id);
         }
 
-        // Get all active teachers with salary info
-        const teacherList = db.prepare(`
-      SELECT t.id as teacher_id, t.full_name, t.salary_scale,
-             s.basic_salary, s.housing_allowance, s.transport_allowance, s.medical_allowance,
-             s.other_allowance, s.tax_percentage, s.nssf_percentage, s.loan_deduction, s.other_deduction
-      FROM teachers t
-      LEFT JOIN salary_structures s ON t.salary_scale = s.salary_scale
-      WHERE t.is_active = 1
-    `).all();
-
-        if (!teacherList.length) {
+        // Get active teachers with salary info
+        const { rows: teacherList } = await client.query(`
+            SELECT t.id as teacher_id, t.full_name, t.salary_scale,
+                   s.basic_salary, s.housing_allowance, s.transport_allowance, s.medical_allowance,
+                   s.other_allowance, s.tax_percentage, s.nssf_percentage, s.loan_deduction, s.other_deduction
+            FROM teachers t
+            LEFT JOIN salary_structures s ON t.salary_scale = s.salary_scale
+            WHERE t.is_active = true
+        `);
+        if (!teacherList.length)
             return res.status(400).json({ error: 'No active teachers found.' });
+
+        await client.query('BEGIN');
+
+        // Remove existing draft if any
+        if (existRows.length) {
+            await client.query("DELETE FROM payroll_items WHERE payroll_id = $1", [existRows[0].id]);
+            await client.query("DELETE FROM payroll WHERE id = $1", [existRows[0].id]);
         }
 
-        // Create payroll record and all items in a single transaction
-        const { lastInsertRowid: payrollId } = db.prepare(
-            "INSERT INTO payroll (month, year, status, processed_by) VALUES (?, ?, 'processed', ?)"
-        ).run(month, year, req.user.id);
+        // Create payroll record
+        const { rows: [newPayroll] } = await client.query(
+            "INSERT INTO payroll (month, year, status, processed_by) VALUES ($1,$2,'processed',$3) RETURNING id",
+            [month, year, req.user.id]
+        );
+        const payrollId = newPayroll.id;
 
         let totalGross = 0, totalDeductions = 0, totalNet = 0;
 
-        const insertItem = db.prepare(`
-      INSERT INTO payroll_items (payroll_id, teacher_id, basic_salary, housing_allowance, transport_allowance,
-        medical_allowance, other_allowance, gross_salary, tax_amount, nssf_amount, loan_deduction,
-        other_deduction, total_deductions, net_salary)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-    `);
+        for (const t of teacherList) {
+            const basic      = Number(t.basic_salary)      || 0;
+            const housing    = Number(t.housing_allowance)  || 0;
+            const transport  = Number(t.transport_allowance)|| 0;
+            const medical    = Number(t.medical_allowance)  || 0;
+            const otherAllow = Number(t.other_allowance)    || 0;
+            const gross      = basic + housing + transport + medical + otherAllow;
 
-        const processAll = db.transaction((teachers) => {
-            for (const t of teachers) {
-                const basic = t.basic_salary || 0;
-                const housing = t.housing_allowance || 0;
-                const transport = t.transport_allowance || 0;
-                const medical = t.medical_allowance || 0;
-                const otherAllow = t.other_allowance || 0;
-                const gross = basic + housing + transport + medical + otherAllow;
+            const taxAmount  = basic * (Number(t.tax_percentage)  || 0) / 100;
+            const nssfAmount = basic * (Number(t.nssf_percentage) || 0) / 100;
+            const loanDed    = Number(t.loan_deduction)  || 0;
+            const otherDed   = Number(t.other_deduction) || 0;
+            const totalDed   = taxAmount + nssfAmount + loanDed + otherDed;
+            const net        = gross - totalDed;
 
-                const taxAmount = basic * ((t.tax_percentage || 0) / 100);
-                const nssfAmount = basic * ((t.nssf_percentage || 0) / 100);
-                const loanDed = t.loan_deduction || 0;
-                const otherDed = t.other_deduction || 0;
-                const totalDed = taxAmount + nssfAmount + loanDed + otherDed;
-                const net = gross - totalDed;
+            await client.query(
+                `INSERT INTO payroll_items
+                    (payroll_id, teacher_id, basic_salary, housing_allowance, transport_allowance,
+                     medical_allowance, other_allowance, gross_salary, tax_amount, nssf_amount,
+                     loan_deduction, other_deduction, total_deductions, net_salary)
+                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+                [payrollId, t.teacher_id, basic, housing, transport, medical, otherAllow,
+                 gross, taxAmount, nssfAmount, loanDed, otherDed, totalDed, net]
+            );
 
-                insertItem.run(payrollId, t.teacher_id, basic, housing, transport, medical, otherAllow, gross, taxAmount, nssfAmount, loanDed, otherDed, totalDed, net);
+            totalGross       += gross;
+            totalDeductions  += totalDed;
+            totalNet         += net;
+        }
 
-                totalGross += gross;
-                totalDeductions += totalDed;
-                totalNet += net;
-            }
-        });
+        await client.query(
+            "UPDATE payroll SET total_gross=$1, total_deductions=$2, total_net=$3, updated_at=NOW() WHERE id=$4",
+            [totalGross, totalDeductions, totalNet, payrollId]
+        );
 
-        processAll(teacherList);
-
-        db.prepare(
-            "UPDATE payroll SET total_gross = ?, total_deductions = ?, total_net = ?, updated_at = datetime('now') WHERE id = ?"
-        ).run(totalGross, totalDeductions, totalNet, payrollId);
+        await client.query('COMMIT');
 
         logAudit(db, req.user.id, req.user.username, 'PROCESS_PAYROLL',
             `Processed payroll for ${month}/${year}: ${teacherList.length} teachers`, req.ip);
@@ -138,91 +138,86 @@ router.post('/payroll/process', (req, res) => {
             total_net: totalNet
         });
     } catch (err) {
+        await client.query('ROLLBACK');
         console.error('Process payroll error:', err);
         res.status(500).json({ error: 'Failed to process payroll.' });
+    } finally {
+        client.release();
     }
 });
 
-// GET /api/accountant/payroll/:id/items
-router.get('/payroll/:id/items', (req, res) => {
+router.get('/payroll/:id/items', async (req, res) => {
     try {
         const db = getDb();
-        const items = db.prepare(`
-      SELECT pi.*, t.full_name, t.employee_id, t.salary_scale
-      FROM payroll_items pi
-      JOIN teachers t ON pi.teacher_id = t.id
-      WHERE pi.payroll_id = ?
-      ORDER BY t.full_name
-    `).all(req.params.id);
-        res.json(items);
-    } catch (err) {
-        res.status(500).json({ error: 'Failed to fetch payroll items.' });
-    }
+        const { rows } = await db.query(`
+            SELECT pi.*, t.full_name, t.employee_id, t.salary_scale
+            FROM payroll_items pi
+            JOIN teachers t ON pi.teacher_id = t.id
+            WHERE pi.payroll_id = $1
+            ORDER BY t.full_name
+        `, [req.params.id]);
+        res.json(rows);
+    } catch (err) { res.status(500).json({ error: 'Failed to fetch payroll items.' }); }
 });
 
-// POST /api/accountant/payroll/:id/approve
-router.post('/payroll/:id/approve', (req, res) => {
+router.post('/payroll/:id/approve', async (req, res) => {
     try {
         const db = getDb();
-        const payroll = db.prepare("SELECT status, month, year FROM payroll WHERE id = ?").get(req.params.id);
-        if (!payroll) {
-            return res.status(404).json({ error: 'Payroll not found.' });
-        }
-        if (payroll.status === 'approved') {
-            return res.status(400).json({ error: 'Payroll is already approved.' });
-        }
-        db.prepare(
-            "UPDATE payroll SET status = 'approved', approved_by = ?, updated_at = datetime('now') WHERE id = ?"
-        ).run(req.user.id, req.params.id);
+        const { rows: [payroll] } = await db.query("SELECT status, month, year FROM payroll WHERE id = $1", [req.params.id]);
+        if (!payroll) return res.status(404).json({ error: 'Payroll not found.' });
+        if (payroll.status === 'approved') return res.status(400).json({ error: 'Payroll is already approved.' });
 
-        // Notify teachers
-        const teacherItems = db.prepare(`
-      SELECT pi.teacher_id, t.user_id, pi.net_salary
-      FROM payroll_items pi JOIN teachers t ON pi.teacher_id = t.id
-      WHERE pi.payroll_id = ?
-    `).all(req.params.id);
+        await db.query(
+            "UPDATE payroll SET status='approved', approved_by=$1, updated_at=NOW() WHERE id=$2",
+            [req.user.id, req.params.id]
+        );
 
-        const insertNotif = db.prepare("INSERT INTO notifications (user_id, title, message) VALUES (?, ?, ?)");
-        const notifyAll = db.transaction((items) => {
-            for (const item of items) {
-                if (item.user_id) {
-                    insertNotif.run(item.user_id, 'Salary Processed',
-                        `Your salary for ${payroll.month}/${payroll.year} has been processed. Net amount: ${Number(item.net_salary).toLocaleString()}`);
-                }
+        // Notify each teacher
+        const { rows: teacherItems } = await db.query(`
+            SELECT pi.teacher_id, t.user_id, pi.net_salary
+            FROM payroll_items pi JOIN teachers t ON pi.teacher_id = t.id
+            WHERE pi.payroll_id = $1
+        `, [req.params.id]);
+
+        for (const item of teacherItems) {
+            if (item.user_id) {
+                db.query(
+                    "INSERT INTO notifications (user_id, title, message) VALUES ($1,$2,$3)",
+                    [item.user_id, 'Salary Processed',
+                     `Your salary for ${payroll.month}/${payroll.year} has been processed. Net amount: ${Number(item.net_salary).toLocaleString()}`]
+                ).catch(err => console.error('Notification insert error:', err));
             }
-        });
-        notifyAll(teacherItems);
+        }
 
-        logAudit(db, req.user.id, req.user.username, 'APPROVE_PAYROLL',
-            `Approved payroll ID: ${req.params.id}`, req.ip);
+        logAudit(db, req.user.id, req.user.username, 'APPROVE_PAYROLL', `Approved payroll ID: ${req.params.id}`, req.ip);
         res.json({ message: 'Payroll approved successfully.' });
-    } catch (err) {
-        res.status(500).json({ error: 'Failed to approve payroll.' });
-    }
+    } catch (err) { res.status(500).json({ error: 'Failed to approve payroll.' }); }
 });
 
-// PUT /api/accountant/payroll-items/:id/payment-status
-router.put('/payroll-items/:id/payment-status', (req, res) => {
+router.put('/payroll-items/:id/payment-status', async (req, res) => {
     try {
         const { payment_status } = req.body;
-        if (!['Paid', 'Pending'].includes(payment_status)) {
+        if (!['Paid', 'Pending'].includes(payment_status))
             return res.status(400).json({ error: 'Invalid payment status.' });
-        }
         const db = getDb();
-        db.prepare("UPDATE payroll_items SET payment_status = ? WHERE id = ?").run(payment_status, req.params.id);
+        await db.query("UPDATE payroll_items SET payment_status = $1 WHERE id = $2", [payment_status, req.params.id]);
 
         if (payment_status === 'Paid') {
-            const item = db.prepare("SELECT payroll_id, teacher_id FROM payroll_items WHERE id = ?").get(req.params.id);
+            const { rows: [item] } = await db.query("SELECT payroll_id, teacher_id FROM payroll_items WHERE id = $1", [req.params.id]);
             if (item) {
-                // Check if all items in this payroll are paid
-                const unpaid = db.prepare("SELECT COUNT(*) as cnt FROM payroll_items WHERE payroll_id = ? AND payment_status = 'Pending'").get(item.payroll_id).cnt;
-                if (unpaid === 0) {
-                    db.prepare("UPDATE payroll SET status = 'paid', updated_at = datetime('now') WHERE id = ?").run(item.payroll_id);
+                const { rows: [cnt] } = await db.query(
+                    "SELECT COUNT(*) as cnt FROM payroll_items WHERE payroll_id = $1 AND payment_status = 'Pending'",
+                    [item.payroll_id]
+                );
+                if (parseInt(cnt.cnt) === 0) {
+                    await db.query("UPDATE payroll SET status='paid', updated_at=NOW() WHERE id=$1", [item.payroll_id]);
                 }
-                // Notify teacher
-                const teacher = db.prepare("SELECT user_id FROM teachers WHERE id = ?").get(item.teacher_id);
+                const { rows: [teacher] } = await db.query("SELECT user_id FROM teachers WHERE id = $1", [item.teacher_id]);
                 if (teacher && teacher.user_id) {
-                    db.prepare("INSERT INTO notifications (user_id, title, message) VALUES (?, 'Payment Received', 'Your salary payment has been marked as Paid.')").run(teacher.user_id);
+                    db.query(
+                        "INSERT INTO notifications (user_id, title, message) VALUES ($1, 'Payment Received', 'Your salary payment has been marked as Paid.')",
+                        [teacher.user_id]
+                    ).catch(err => console.error('Notification insert error:', err));
                 }
             }
         }
@@ -230,52 +225,42 @@ router.put('/payroll-items/:id/payment-status', (req, res) => {
         logAudit(db, req.user.id, req.user.username, 'UPDATE_PAYMENT_STATUS',
             `Updated payment status to ${payment_status} for item ID: ${req.params.id}`, req.ip);
         res.json({ message: 'Payment status updated.' });
-    } catch (err) {
-        res.status(500).json({ error: 'Failed to update payment status.' });
-    }
+    } catch (err) { res.status(500).json({ error: 'Failed to update payment status.' }); }
 });
 
 // ============ REPORTS ============
 
-// GET /api/accountant/reports/monthly?month=X&year=Y
-router.get('/reports/monthly', (req, res) => {
+router.get('/reports/monthly', async (req, res) => {
     try {
         const { month, year } = req.query;
         const db = getDb();
         let rows;
         if (month && year) {
-            rows = db.prepare(`
-        SELECT p.*,
-          (SELECT COUNT(*) FROM payroll_items WHERE payroll_id = p.id) as teacher_count
-        FROM payroll p WHERE p.month = ? AND p.year = ?
-        ORDER BY p.year DESC, p.month DESC
-      `).all(month, year);
+            ({ rows } = await db.query(`
+                SELECT p.*, (SELECT COUNT(*) FROM payroll_items WHERE payroll_id = p.id) as teacher_count
+                FROM payroll p WHERE p.month = $1 AND p.year = $2 ORDER BY p.year DESC, p.month DESC
+            `, [month, year]));
         } else {
-            rows = db.prepare(`
-        SELECT p.*,
-          (SELECT COUNT(*) FROM payroll_items WHERE payroll_id = p.id) as teacher_count
-        FROM payroll p ORDER BY p.year DESC, p.month DESC
-      `).all();
+            ({ rows } = await db.query(`
+                SELECT p.*, (SELECT COUNT(*) FROM payroll_items WHERE payroll_id = p.id) as teacher_count
+                FROM payroll p ORDER BY p.year DESC, p.month DESC
+            `));
         }
         res.json(rows);
-    } catch (err) {
-        res.status(500).json({ error: 'Failed to fetch report.' });
-    }
+    } catch (err) { res.status(500).json({ error: 'Failed to fetch report.' }); }
 });
 
-// GET /api/accountant/reports/export/excel/:payrollId
 router.get('/reports/export/excel/:payrollId', async (req, res) => {
     try {
         const db = getDb();
-        const pInfo = db.prepare("SELECT * FROM payroll WHERE id = ?").get(req.params.payrollId);
+        const { rows: [pInfo] } = await db.query("SELECT * FROM payroll WHERE id = $1", [req.params.payrollId]);
         if (!pInfo) return res.status(404).json({ error: 'Payroll not found.' });
 
-        const itemList = db.prepare(`
-      SELECT pi.*, t.full_name, t.employee_id, t.salary_scale
-      FROM payroll_items pi JOIN teachers t ON pi.teacher_id = t.id
-      WHERE pi.payroll_id = ?
-      ORDER BY t.full_name
-    `).all(req.params.payrollId);
+        const { rows: itemList } = await db.query(`
+            SELECT pi.*, t.full_name, t.employee_id, t.salary_scale
+            FROM payroll_items pi JOIN teachers t ON pi.teacher_id = t.id
+            WHERE pi.payroll_id = $1 ORDER BY t.full_name
+        `, [req.params.payrollId]);
 
         const workbook = new ExcelJS.Workbook();
         const sheet = workbook.addWorksheet('Payroll Report');
@@ -283,11 +268,11 @@ router.get('/reports/export/excel/:payrollId', async (req, res) => {
         sheet.mergeCells('A1:N1');
         sheet.getCell('A1').value = `EduPay Payroll Report - ${pInfo.month}/${pInfo.year}`;
         sheet.getCell('A1').font = { size: 16, bold: true };
-
         sheet.mergeCells('A2:N2');
         sheet.getCell('A2').value = `Status: ${pInfo.status} | Total Net: ${pInfo.total_net}`;
 
-        const headers = ['#', 'Employee ID', 'Name', 'Scale', 'Basic Salary', 'Housing', 'Transport', 'Medical', 'Other Allow.', 'Gross', 'Tax', 'NSSF', 'Loan', 'Other Ded.', 'Total Ded.', 'Net Salary', 'Status'];
+        const headers = ['#','Employee ID','Name','Scale','Basic Salary','Housing','Transport','Medical',
+                         'Other Allow.','Gross','Tax','NSSF','Loan','Other Ded.','Total Ded.','Net Salary','Status'];
         const headerRow = sheet.addRow(headers);
         headerRow.font = { bold: true };
         headerRow.eachCell(cell => {
@@ -307,7 +292,6 @@ router.get('/reports/export/excel/:payrollId', async (req, res) => {
         });
 
         sheet.columns.forEach(col => { col.width = 15; });
-
         res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         res.setHeader('Content-Disposition', `attachment; filename=payroll_${pInfo.month}_${pInfo.year}.xlsx`);
         await workbook.xlsx.write(res);
@@ -318,19 +302,17 @@ router.get('/reports/export/excel/:payrollId', async (req, res) => {
     }
 });
 
-// GET /api/accountant/reports/export/pdf/:payrollId
-router.get('/reports/export/pdf/:payrollId', (req, res) => {
+router.get('/reports/export/pdf/:payrollId', async (req, res) => {
     try {
         const db = getDb();
-        const pInfo = db.prepare("SELECT * FROM payroll WHERE id = ?").get(req.params.payrollId);
+        const { rows: [pInfo] } = await db.query("SELECT * FROM payroll WHERE id = $1", [req.params.payrollId]);
         if (!pInfo) return res.status(404).json({ error: 'Payroll not found.' });
 
-        const itemList = db.prepare(`
-      SELECT pi.*, t.full_name, t.employee_id, t.salary_scale
-      FROM payroll_items pi JOIN teachers t ON pi.teacher_id = t.id
-      WHERE pi.payroll_id = ?
-      ORDER BY t.full_name
-    `).all(req.params.payrollId);
+        const { rows: itemList } = await db.query(`
+            SELECT pi.*, t.full_name, t.employee_id, t.salary_scale
+            FROM payroll_items pi JOIN teachers t ON pi.teacher_id = t.id
+            WHERE pi.payroll_id = $1 ORDER BY t.full_name
+        `, [req.params.payrollId]);
 
         const doc = new PDFDocument({ margin: 30, size: 'A4', layout: 'landscape' });
         res.setHeader('Content-Type', 'application/pdf');
@@ -342,13 +324,16 @@ router.get('/reports/export/pdf/:payrollId', (req, res) => {
         doc.fontSize(12).fillColor('#333').text(`Period: ${pInfo.month}/${pInfo.year}  |  Status: ${pInfo.status}`, { align: 'center' });
         doc.moveDown(0.5);
         doc.fontSize(10).fillColor('#000');
-        doc.text(`Total Gross: ${Number(pInfo.total_gross).toLocaleString()}  |  Total Deductions: ${Number(pInfo.total_deductions).toLocaleString()}  |  Total Net: ${Number(pInfo.total_net).toLocaleString()}`, { align: 'center' });
+        doc.text(
+            `Total Gross: ${Number(pInfo.total_gross).toLocaleString()}  |  Total Deductions: ${Number(pInfo.total_deductions).toLocaleString()}  |  Total Net: ${Number(pInfo.total_net).toLocaleString()}`,
+            { align: 'center' }
+        );
         doc.moveDown(1);
 
         const startX = 30;
         let y = doc.y;
         const colWidths = [25, 55, 100, 50, 65, 55, 55, 55, 55, 55, 50, 50, 50];
-        const headers = ['#', 'Emp ID', 'Name', 'Scale', 'Basic', 'Housing', 'Transport', 'Gross', 'Tax', 'NSSF', 'Deductions', 'Net', 'Status'];
+        const headers = ['#','Emp ID','Name','Scale','Basic','Housing','Transport','Gross','Tax','NSSF','Deductions','Net','Status'];
 
         let x = startX;
         headers.forEach((h, i) => {
@@ -382,7 +367,6 @@ router.get('/reports/export/pdf/:payrollId', (req, res) => {
             });
             y += 14;
         });
-
         doc.end();
     } catch (err) {
         console.error('PDF export error:', err);
@@ -392,21 +376,19 @@ router.get('/reports/export/pdf/:payrollId', (req, res) => {
 
 // ============ PAYSLIP ============
 
-// GET /api/accountant/payslip/:payrollItemId/pdf
-router.get('/payslip/:payrollItemId/pdf', (req, res) => {
+router.get('/payslip/:payrollItemId/pdf', async (req, res) => {
     try {
         const db = getDb();
-        const item = db.prepare(`
-      SELECT pi.*, t.full_name, t.employee_id, t.position, t.salary_scale, p.month, p.year
-      FROM payroll_items pi
-      JOIN teachers t ON pi.teacher_id = t.id
-      JOIN payroll p ON pi.payroll_id = p.id
-      WHERE pi.id = ?
-    `).get(req.params.payrollItemId);
-
+        const { rows: [item] } = await db.query(`
+            SELECT pi.*, t.full_name, t.employee_id, t.position, t.salary_scale, p.month, p.year
+            FROM payroll_items pi
+            JOIN teachers t ON pi.teacher_id = t.id
+            JOIN payroll p ON pi.payroll_id = p.id
+            WHERE pi.id = $1
+        `, [req.params.payrollItemId]);
         if (!item) return res.status(404).json({ error: 'Payslip not found.' });
 
-        const configRows = db.prepare("SELECT config_key, config_value FROM system_config").all();
+        const { rows: configRows } = await db.query("SELECT config_key, config_value FROM system_config");
         const configs = {};
         configRows.forEach(c => { configs[c.config_key] = c.config_value; });
         const schoolName = configs.school_name || 'EduPay School';
@@ -486,26 +468,26 @@ router.get('/payslip/:payrollItemId/pdf', (req, res) => {
     }
 });
 
-// GET /api/accountant/stats
-router.get('/stats', (req, res) => {
+// ============ STATS ============
+
+router.get('/stats', async (req, res) => {
     try {
         const db = getDb();
-        const totalTeachers = db.prepare("SELECT COUNT(*) as cnt FROM teachers WHERE is_active = 1").get().cnt;
-        const totalPayrolls = db.prepare("SELECT COUNT(*) as cnt FROM payroll").get().cnt;
-        const pendingPayrolls = db.prepare("SELECT COUNT(*) as cnt FROM payroll WHERE status IN ('draft','processed')").get().cnt;
-        const latestPayroll = db.prepare("SELECT * FROM payroll ORDER BY created_at DESC LIMIT 1").get() || null;
-        const totalPaid = db.prepare("SELECT COALESCE(SUM(total_net), 0) as total FROM payroll WHERE status IN ('approved','paid')").get().total;
-
+        const [teachersR, payrollsR, pendingR, latestR, paidR] = await Promise.all([
+            db.query("SELECT COUNT(*) as cnt FROM teachers WHERE is_active = true"),
+            db.query("SELECT COUNT(*) as cnt FROM payroll"),
+            db.query("SELECT COUNT(*) as cnt FROM payroll WHERE status IN ('draft','processed')"),
+            db.query("SELECT * FROM payroll ORDER BY created_at DESC LIMIT 1"),
+            db.query("SELECT COALESCE(SUM(total_net), 0) as total FROM payroll WHERE status IN ('approved','paid')"),
+        ]);
         res.json({
-            total_teachers: totalTeachers || 0,
-            total_payrolls: totalPayrolls || 0,
-            pending_payrolls: pendingPayrolls || 0,
-            total_paid: totalPaid || 0,
-            latest_payroll: latestPayroll
+            total_teachers:   parseInt(teachersR.rows[0].cnt) || 0,
+            total_payrolls:   parseInt(payrollsR.rows[0].cnt) || 0,
+            pending_payrolls: parseInt(pendingR.rows[0].cnt)  || 0,
+            total_paid:       Number(paidR.rows[0].total)     || 0,
+            latest_payroll:   latestR.rows[0] || null,
         });
-    } catch (err) {
-        res.status(500).json({ error: 'Failed to fetch stats.' });
-    }
+    } catch (err) { res.status(500).json({ error: 'Failed to fetch stats.' }); }
 });
 
 module.exports = router;
