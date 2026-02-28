@@ -470,17 +470,21 @@ router.get('/backup', async (req, res) => {
 router.get('/stats', async (req, res) => {
     try {
         const db = getDb();
-        const [usersR, teachersR, payrollsR, recentR] = await Promise.all([
+        const [usersR, teachersR, accountantsR, adminsR, payrollsR, recentR] = await Promise.all([
             db.query("SELECT COUNT(*) as cnt FROM users"),
             db.query("SELECT COUNT(*) as cnt FROM teachers WHERE is_active = true"),
+            db.query("SELECT COUNT(*) as cnt FROM accountants WHERE is_active = true"),
+            db.query("SELECT COUNT(*) as cnt FROM users WHERE role = 'admin'"),
             db.query("SELECT COUNT(*) as cnt FROM payroll"),
             db.query("SELECT * FROM payroll ORDER BY created_at DESC LIMIT 1"),
         ]);
         res.json({
-            total_users:    parseInt(usersR.rows[0].cnt)    || 0,
-            total_teachers: parseInt(teachersR.rows[0].cnt) || 0,
-            total_payrolls: parseInt(payrollsR.rows[0].cnt) || 0,
-            recent_payroll: recentR.rows[0] || null,
+            total_users:       parseInt(usersR.rows[0].cnt)       || 0,
+            total_teachers:    parseInt(teachersR.rows[0].cnt)    || 0,
+            total_accountants: parseInt(accountantsR.rows[0].cnt) || 0,
+            total_admins:      parseInt(adminsR.rows[0].cnt)      || 0,
+            total_payrolls:    parseInt(payrollsR.rows[0].cnt)    || 0,
+            recent_payroll:    recentR.rows[0] || null,
         });
     } catch (err) { res.status(500).json({ error: 'Failed to fetch stats.' }); }
 });

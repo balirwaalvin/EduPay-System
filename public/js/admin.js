@@ -20,6 +20,8 @@ async function loadDashboard() {
         const stats = await apiRequest('/admin/stats');
         document.getElementById('statUsers').textContent = stats.total_users;
         document.getElementById('statTeachers').textContent = stats.total_teachers;
+        document.getElementById('statAccountants').textContent = stats.total_accountants;
+        document.getElementById('statAdmins').textContent = stats.total_admins;
         document.getElementById('statPayrolls').textContent = stats.total_payrolls;
         if (stats.recent_payroll) {
             document.getElementById('statLatestPayroll').textContent =

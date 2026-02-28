@@ -685,6 +685,7 @@ body {
 .stat-card .stat-icon.green { background: var(--success-bg); color: var(--success); }
 .stat-card .stat-icon.blue { background: var(--info-bg); color: var(--info); }
 .stat-card .stat-icon.orange { background: var(--warning-bg); color: var(--warning); }
+.stat-card .stat-icon.purple { background: #f0ebff; color: #7c3aed; }
 
 .stat-card .stat-value {
   font-size: 1.8rem;
