@@ -2,11 +2,13 @@ require('dotenv').config();
 const { Pool } = require('pg');
 const bcrypt = require('bcryptjs');
 
+// Strip sslmode from the URL so pg doesn't override our ssl config object
+const connectionString = (process.env.DATABASE_URL || '').replace(/[?&]sslmode=[^&]*/g, '').replace(/\?$/, '');
+const useSSL = (process.env.DATABASE_URL || '').includes('sslmode=');
+
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.DATABASE_URL && process.env.DATABASE_URL.includes('sslmode=require')
-    ? { rejectUnauthorized: false }
-    : false
+  connectionString: connectionString || process.env.DATABASE_URL,
+  ssl: useSSL ? { rejectUnauthorized: false } : false
 });
 
 async function initDatabase() {
