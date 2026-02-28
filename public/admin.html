@@ -28,6 +28,9 @@
                     <div class="nav-item" data-section="users" onclick="switchSection('users')">
                         <span class="nav-icon">👥</span> User Management
                     </div>
+                    <div class="nav-item" data-section="admins" onclick="switchSection('admins')">
+                        <span class="nav-icon">👑</span> Admin Management
+                    </div>
                     <div class="nav-item" data-section="teachers" onclick="switchSection('teachers')">
                         <span class="nav-icon">🎓</span> Teacher Management
                     </div>
@@ -109,6 +112,8 @@
                                 Teachers</button>
                             <button class="btn btn-primary" onclick="switchSection('accountants')">🧾 Manage
                                 Accountants</button>
+                            <button class="btn btn-primary" onclick="switchSection('admins')">👑 Manage
+                                Admins</button>
                             <button class="btn btn-primary" onclick="switchSection('salary')">💰 Salary
                                 Structure</button>
                             <button class="btn btn-secondary" onclick="switchSection('config')">⚙️ System
@@ -140,6 +145,34 @@
                                         </tr>
                                     </thead>
                                     <tbody id="usersTableBody"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Admin Management -->
+                <div id="admins" class="page-section">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Admin Management</h3>
+                            <button class="btn btn-primary" onclick="showCreateAdminModal()">+ Add Admin</button>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>Username</th>
+                                            <th>Full Name</th>
+                                            <th>Email</th>
+                                            <th>Phone</th>
+                                            <th>Date Created</th>
+                                            <th>Status</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="adminsTableBody"></tbody>
                                 </table>
                             </div>
                         </div>
@@ -414,6 +447,47 @@
         </div>
     </div>
 
+    <!-- Create/Edit Admin Modal -->
+    <div id="adminModal" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 id="adminModalTitle">Add New Admin</h3>
+                <button class="modal-close" onclick="closeModal('adminModal')">✕</button>
+            </div>
+            <div class="modal-body">
+                <form id="adminForm">
+                    <input type="hidden" id="editAdminId">
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label>Full Name *</label>
+                            <input type="text" id="adminFullName" class="form-control" required>
+                        </div>
+                        <div class="form-group" id="adminUsernameGroup">
+                            <label>Username * <span id="adminUsernameHint" style="font-size:11px;color:var(--text-secondary);"></span></label>
+                            <input type="text" id="adminUsername" class="form-control" placeholder="e.g. john.admin">
+                        </div>
+                        <div class="form-group">
+                            <label>Email</label>
+                            <input type="email" id="adminEmail" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label>Phone</label>
+                            <input type="text" id="adminPhone" class="form-control">
+                        </div>
+                        <div class="form-group" id="adminPasswordGroup">
+                            <label>Password <span style="font-size:11px;color:var(--text-secondary);">(default: admin123)</span></label>
+                            <input type="password" id="adminPassword" class="form-control" placeholder="Leave blank for default">
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('adminModal')">Cancel</button>
+                <button class="btn btn-primary" onclick="saveAdmin()">Save Admin</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Create/Edit Accountant Modal -->
     <div id="accountantModal" class="modal-overlay">
         <div class="modal">
@@ -428,6 +502,10 @@
                         <div class="form-group">
                             <label>Full Name *</label>
                             <input type="text" id="accountantFullName" class="form-control" required>
+                        </div>
+                        <div class="form-group" id="accountantUsernameGroup">
+                            <label>Username <span id="accountantUsernameHint" style="font-size:11px;color:var(--text-secondary);"></span></label>
+                            <input type="text" id="accountantUsername" class="form-control" placeholder="Leave blank to auto-generate">
                         </div>
                         <div class="form-group">
                             <label>Department</label>
@@ -469,6 +547,10 @@
                         <div class="form-group">
                             <label>Full Name *</label>
                             <input type="text" id="teacherFullName" class="form-control" required>
+                        </div>
+                        <div class="form-group" id="teacherUsernameGroup">
+                            <label>Username <span id="teacherUsernameHint" style="font-size:11px;color:var(--text-secondary);"></span></label>
+                            <input type="text" id="teacherUsername" class="form-control" placeholder="Leave blank to auto-generate">
                         </div>
                         <div class="form-group">
                             <label>Position</label>

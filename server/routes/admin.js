@@ -126,14 +126,16 @@ router.get('/teachers', async (req, res) => {
 
 router.post('/teachers', async (req, res) => {
     try {
-        const { full_name, email, phone, position, salary_scale, date_joined } = req.body;
+        const { full_name, email, phone, position, salary_scale, date_joined, username: requestedUsername } = req.body;
         if (!full_name || !salary_scale)
             return res.status(400).json({ error: 'Full name and salary scale are required.' });
         const db = getDb();
-        const baseUsername = full_name.toLowerCase().replace(/\s+/g, '.').replace(/[^a-z.]/g, '');
+        // Use provided username or auto-generate from full name
+        const baseUsername = (requestedUsername || full_name).toLowerCase().replace(/\s+/g, '.').replace(/[^a-z.]/g, '');
         let uniqueUsername = baseUsername;
         let counter = 1;
         while ((await db.query("SELECT id FROM users WHERE username = $1", [uniqueUsername])).rows.length) {
+            if (requestedUsername) return res.status(409).json({ error: `Username "${requestedUsername}" is already taken.` });
             uniqueUsername = baseUsername + counter++;
         }
         const defaultPassword = bcrypt.hashSync('teacher123', 10);
@@ -212,13 +214,15 @@ router.get('/accountants', async (req, res) => {
 
 router.post('/accountants', async (req, res) => {
     try {
-        const { full_name, email, phone, department, date_joined } = req.body;
+        const { full_name, email, phone, department, date_joined, username: requestedUsername } = req.body;
         if (!full_name) return res.status(400).json({ error: 'Full name is required.' });
         const db = getDb();
-        const baseUsername = full_name.toLowerCase().replace(/\s+/g, '.').replace(/[^a-z.]/g, '');
+        // Use provided username or auto-generate from full name
+        const baseUsername = (requestedUsername || full_name).toLowerCase().replace(/\s+/g, '.').replace(/[^a-z.]/g, '');
         let uniqueUsername = baseUsername;
         let counter = 1;
         while ((await db.query("SELECT id FROM users WHERE username = $1", [uniqueUsername])).rows.length) {
+            if (requestedUsername) return res.status(409).json({ error: `Username "${requestedUsername}" is already taken.` });
             uniqueUsername = baseUsername + counter++;
         }
         const defaultPassword = bcrypt.hashSync('accountant123', 10);
@@ -276,6 +280,66 @@ router.delete('/accountants/:id', async (req, res) => {
         logAudit(db, req.user.id, req.user.username, 'DELETE_ACCOUNTANT', `Deleted accountant ID: ${req.params.id}`, req.ip);
         res.json({ message: 'Accountant removed successfully.' });
     } catch (err) { res.status(500).json({ error: 'Failed to delete accountant.' }); }
+});
+
+// ============ ADMIN MANAGEMENT ============
+
+router.get('/admins', async (req, res) => {
+    try {
+        const db = getDb();
+        const { rows } = await db.query(
+            "SELECT id, username, full_name, email, phone, is_active, created_at FROM users WHERE role='admin' ORDER BY created_at DESC"
+        );
+        res.json(rows);
+    } catch (err) { res.status(500).json({ error: 'Failed to fetch admins.' }); }
+});
+
+router.post('/admins', async (req, res) => {
+    try {
+        const { full_name, username, email, phone, password: customPassword } = req.body;
+        if (!full_name || !username) return res.status(400).json({ error: 'Full name and username are required.' });
+        const db = getDb();
+        const { rows: ex } = await db.query("SELECT id FROM users WHERE username = $1", [username]);
+        if (ex.length) return res.status(409).json({ error: `Username "${username}" is already taken.` });
+        const hashedPassword = bcrypt.hashSync(customPassword || 'admin123', 10);
+        const { rows: [newUser] } = await db.query(
+            `INSERT INTO users (username, password, role, full_name, email, phone, must_change_password)
+             VALUES ($1,$2,'admin',$3,$4,$5,1) RETURNING id, username`,
+            [username, hashedPassword, full_name, email || '', phone || '']
+        );
+        logAudit(db, req.user.id, req.user.username, 'CREATE_ADMIN', `Created admin: ${username}`, req.ip);
+        res.status(201).json({
+            message: 'Admin created successfully.',
+            admin: { id: newUser.id, username: newUser.username, default_password: customPassword || 'admin123' }
+        });
+    } catch (err) {
+        console.error('Create admin error:', err);
+        res.status(500).json({ error: 'Failed to create admin.' });
+    }
+});
+
+router.put('/admins/:id', async (req, res) => {
+    try {
+        const { full_name, email, phone } = req.body;
+        const db = getDb();
+        await db.query(
+            "UPDATE users SET full_name=COALESCE($1,full_name), email=COALESCE($2,email), phone=COALESCE($3,phone), updated_at=NOW() WHERE id=$4 AND role='admin'",
+            [full_name || null, email || null, phone || null, req.params.id]
+        );
+        logAudit(db, req.user.id, req.user.username, 'UPDATE_ADMIN', `Updated admin ID: ${req.params.id}`, req.ip);
+        res.json({ message: 'Admin updated successfully.' });
+    } catch (err) { res.status(500).json({ error: 'Failed to update admin.' }); }
+});
+
+router.delete('/admins/:id', async (req, res) => {
+    try {
+        if (parseInt(req.params.id) === req.user.id)
+            return res.status(400).json({ error: 'You cannot delete your own admin account.' });
+        const db = getDb();
+        await db.query("DELETE FROM users WHERE id=$1 AND role='admin'", [req.params.id]);
+        logAudit(db, req.user.id, req.user.username, 'DELETE_ADMIN', `Deleted admin ID: ${req.params.id}`, req.ip);
+        res.json({ message: 'Admin removed successfully.' });
+    } catch (err) { res.status(500).json({ error: 'Failed to delete admin.' }); }
 });
 
 // ============ SALARY STRUCTURES ============

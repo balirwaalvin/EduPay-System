@@ -5,6 +5,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initUserDisplay();
     loadDashboard();
     loadUsers();
+    loadAdmins();
     loadTeachers();
     loadAccountants();
     loadSalaryStructures();
@@ -25,6 +26,107 @@ async function loadDashboard() {
                 `${getMonthName(stats.recent_payroll.month)} ${stats.recent_payroll.year}`;
         }
     } catch (err) { console.error('Dashboard error:', err); }
+}
+
+// ============ ADMINS ============
+let allAdmins = [];
+
+async function loadAdmins() {
+    try {
+        allAdmins = await apiRequest('/admin/admins');
+        renderAdminsTable();
+    } catch (err) { showToast('Failed to load admins', 'error'); }
+}
+
+function renderAdminsTable() {
+    const tbody = document.getElementById('adminsTableBody');
+    if (!allAdmins.length) {
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center" style="padding:32px;color:var(--text-light);">No admins found</td></tr>';
+        return;
+    }
+    tbody.innerHTML = allAdmins.map(a => `
+    <tr>
+      <td><strong>${a.username}</strong></td>
+      <td>${a.full_name}</td>
+      <td>${a.email || '-'}</td>
+      <td>${a.phone || '-'}</td>
+      <td>${a.created_at ? formatDate(a.created_at) : '-'}</td>
+      <td><span class="badge ${a.is_active ? 'badge-success' : 'badge-gray'}">${a.is_active ? 'Active' : 'Inactive'}</span></td>
+      <td>
+        <div class="action-btns">
+          <button class="btn btn-sm btn-secondary" onclick="editAdmin(${a.id})">Edit</button>
+          <button class="btn btn-sm btn-danger" onclick="deleteAdmin(${a.id})">Delete</button>
+        </div>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function showCreateAdminModal() {
+    document.getElementById('adminModalTitle').textContent = 'Add New Admin';
+    document.getElementById('editAdminId').value = '';
+    document.getElementById('adminForm').reset();
+    document.getElementById('adminUsername').disabled = false;
+    document.getElementById('adminUsernameHint').textContent = '';
+    document.getElementById('adminPasswordGroup').style.display = '';
+    openModal('adminModal');
+}
+
+function editAdmin(id) {
+    const admin = allAdmins.find(a => a.id === id);
+    if (!admin) return;
+    document.getElementById('adminModalTitle').textContent = 'Edit Admin';
+    document.getElementById('editAdminId').value = id;
+    document.getElementById('adminFullName').value = admin.full_name;
+    document.getElementById('adminUsername').value = admin.username;
+    document.getElementById('adminUsername').disabled = true;
+    document.getElementById('adminUsernameHint').textContent = '(cannot be changed after creation)';
+    document.getElementById('adminEmail').value = admin.email || '';
+    document.getElementById('adminPhone').value = admin.phone || '';
+    document.getElementById('adminPassword').value = '';
+    document.getElementById('adminPasswordGroup').style.display = 'none';
+    openModal('adminModal');
+}
+
+async function saveAdmin() {
+    const editId = document.getElementById('editAdminId').value;
+    const data = {
+        full_name: document.getElementById('adminFullName').value.trim(),
+        email: document.getElementById('adminEmail').value.trim(),
+        phone: document.getElementById('adminPhone').value.trim(),
+    };
+    if (!data.full_name) { showToast('Full name is required', 'error'); return; }
+    if (!editId) {
+        const username = document.getElementById('adminUsername').value.trim();
+        const password = document.getElementById('adminPassword').value.trim();
+        if (!username) { showToast('Username is required', 'error'); return; }
+        data.username = username;
+        if (password) data.password = password;
+    }
+    try {
+        if (editId) {
+            await apiRequest(`/admin/admins/${editId}`, { method: 'PUT', body: data });
+            showToast('Admin updated successfully');
+        } else {
+            const result = await apiRequest('/admin/admins', { method: 'POST', body: data });
+            showToast(`Admin created! Username: ${result.admin.username}, Password: ${result.admin.default_password}`);
+        }
+        closeModal('adminModal');
+        loadAdmins();
+        loadUsers();
+        loadDashboard();
+    } catch (err) { showToast(err.message || 'Failed to save admin', 'error'); }
+}
+
+async function deleteAdmin(id) {
+    if (!confirm('Are you sure you want to delete this admin account? This action cannot be undone.')) return;
+    try {
+        await apiRequest(`/admin/admins/${id}`, { method: 'DELETE' });
+        showToast('Admin removed');
+        loadAdmins();
+        loadUsers();
+        loadDashboard();
+    } catch (err) { showToast(err.message, 'error'); }
 }
 
 // ============ USERS ============
@@ -198,6 +300,10 @@ function showCreateAccountantModal() {
     document.getElementById('accountantModalTitle').textContent = 'Add New Accountant';
     document.getElementById('editAccountantId').value = '';
     document.getElementById('accountantForm').reset();
+    const usernameInput = document.getElementById('accountantUsername');
+    usernameInput.disabled = false;
+    usernameInput.placeholder = 'Leave blank to auto-generate';
+    document.getElementById('accountantUsernameHint').textContent = '';
     openModal('accountantModal');
 }
 
@@ -211,11 +317,16 @@ function editAccountant(id) {
     document.getElementById('accountantEmail').value = acc.email || '';
     document.getElementById('accountantPhone').value = acc.phone || '';
     document.getElementById('accountantDateJoined').value = acc.date_joined || '';
+    const usernameInput = document.getElementById('accountantUsername');
+    usernameInput.value = acc.username || '';
+    usernameInput.disabled = true;
+    document.getElementById('accountantUsernameHint').textContent = '(cannot be changed after creation)';
     openModal('accountantModal');
 }
 
 async function saveAccountant() {
     const editId = document.getElementById('editAccountantId').value;
+    const usernameVal = document.getElementById('accountantUsername').value.trim();
     const data = {
         full_name: document.getElementById('accountantFullName').value.trim(),
         department: document.getElementById('accountantDepartment').value.trim(),
@@ -223,6 +334,7 @@ async function saveAccountant() {
         phone: document.getElementById('accountantPhone').value.trim(),
         date_joined: document.getElementById('accountantDateJoined').value,
     };
+    if (!editId && usernameVal) data.username = usernameVal;
     if (!data.full_name) {
         showToast('Full name is required', 'error');
         return;
@@ -291,6 +403,10 @@ async function showCreateTeacherModal() {
     document.getElementById('teacherModalTitle').textContent = 'Add New Teacher';
     document.getElementById('editTeacherId').value = '';
     document.getElementById('teacherForm').reset();
+    const usernameInput = document.getElementById('teacherUsername');
+    usernameInput.disabled = false;
+    usernameInput.placeholder = 'Leave blank to auto-generate';
+    document.getElementById('teacherUsernameHint').textContent = '';
     await loadSalaryScalesDropdown();
     openModal('teacherModal');
 }
@@ -307,11 +423,16 @@ async function editTeacher(id) {
     document.getElementById('teacherEmail').value = teacher.email || '';
     document.getElementById('teacherPhone').value = teacher.phone || '';
     document.getElementById('teacherDateJoined').value = teacher.date_joined || '';
+    const usernameInput = document.getElementById('teacherUsername');
+    usernameInput.value = teacher.username || '';
+    usernameInput.disabled = true;
+    document.getElementById('teacherUsernameHint').textContent = '(cannot be changed after creation)';
     openModal('teacherModal');
 }
 
 async function saveTeacher() {
     const editId = document.getElementById('editTeacherId').value;
+    const usernameVal = document.getElementById('teacherUsername').value.trim();
     const data = {
         full_name: document.getElementById('teacherFullName').value,
         position: document.getElementById('teacherPosition').value,
@@ -320,6 +441,7 @@ async function saveTeacher() {
         phone: document.getElementById('teacherPhone').value,
         date_joined: document.getElementById('teacherDateJoined').value,
     };
+    if (!editId && usernameVal) data.username = usernameVal;
 
     if (!data.full_name || !data.salary_scale) {
         showToast('Full name and salary scale are required', 'error');
@@ -561,6 +683,7 @@ switchSection = function (sectionId) {
     const titles = {
         dashboard: 'Dashboard',
         users: 'User Management',
+        admins: 'Admin Management',
         teachers: 'Teacher Management',
         accountants: 'Accountant Management',
         salary: 'Salary Structure',
