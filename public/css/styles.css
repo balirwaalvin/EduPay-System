@@ -77,25 +77,27 @@ body {
 .login-wrapper::before {
   content: '';
   position: absolute;
-  width: 600px;
-  height: 600px;
+  width: 700px;
+  height: 700px;
   border-radius: 50%;
-  background: radial-gradient(circle, var(--primary-glow), transparent 70%);
-  top: -200px;
-  right: -200px;
-  animation: pulse 4s ease-in-out infinite;
+  background: radial-gradient(circle, rgba(220,38,38,0.18) 0%, rgba(185,28,28,0.08) 40%, transparent 70%);
+  top: -250px;
+  right: -250px;
+  animation: pulse 5s ease-in-out infinite;
+  filter: blur(10px);
 }
 
 .login-wrapper::after {
   content: '';
   position: absolute;
-  width: 400px;
-  height: 400px;
+  width: 500px;
+  height: 500px;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(220,38,38,0.15), transparent 70%);
-  bottom: -100px;
-  left: -100px;
-  animation: pulse 4s ease-in-out infinite 2s;
+  background: radial-gradient(circle, rgba(220,38,38,0.14) 0%, rgba(139,0,0,0.06) 40%, transparent 70%);
+  bottom: -150px;
+  left: -150px;
+  animation: pulse 5s ease-in-out infinite 2.5s;
+  filter: blur(8px);
 }
 
 @keyframes pulse {
@@ -104,26 +106,125 @@ body {
 }
 
 .login-card {
-  background: rgba(255,255,255,0.05);
-  backdrop-filter: blur(20px);
-  border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(15, 5, 5, 0.55);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(220, 38, 38, 0.3);
   border-radius: var(--radius-xl);
   padding: 48px 40px;
   width: 100%;
   max-width: 420px;
   position: relative;
-  z-index: 1;
-  animation: slideUp 0.6s ease-out;
+  z-index: 10;
+  animation: slideUp 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards, cardGlow 3.5s ease-in-out 0.7s infinite;
+  box-shadow:
+    0 0 0 1px rgba(220, 38, 38, 0.15),
+    0 0 20px rgba(220, 38, 38, 0.2),
+    0 0 45px rgba(220, 38, 38, 0.1),
+    0 0 80px rgba(220, 38, 38, 0.05),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 0 30px rgba(220, 38, 38, 0.04),
+    0 30px 60px rgba(0, 0, 0, 0.5);
+}
+
+/* Rotating gradient glow border */
+.login-card::before {
+  content: '';
+  position: absolute;
+  inset: -1.5px;
+  border-radius: calc(var(--radius-xl) + 1px);
+  background: conic-gradient(
+    from var(--angle, 0deg),
+    transparent 0deg,
+    rgba(220, 38, 38, 0.7) 60deg,
+    rgba(255, 120, 120, 0.4) 120deg,
+    transparent 180deg,
+    rgba(220, 38, 38, 0.5) 240deg,
+    rgba(255, 80, 80, 0.3) 300deg,
+    transparent 360deg
+  );
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  padding: 1.5px;
+  animation: rotateBorder 4s linear infinite;
+  z-index: -1;
+}
+
+/* Soft inner shimmer */
+.login-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-xl);
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.04) 0%,
+    transparent 40%,
+    transparent 60%,
+    rgba(220, 38, 38, 0.04) 100%
+  );
+  pointer-events: none;
+  z-index: 0;
+}
+
+.login-card > * { position: relative; z-index: 1; }
+
+@property --angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes rotateBorder {
+  to { --angle: 360deg; }
+}
+
+@keyframes cardGlow {
+  0%, 100% {
+    box-shadow:
+      0 0 0 1px rgba(220, 38, 38, 0.15),
+      0 0 20px rgba(220, 38, 38, 0.2),
+      0 0 45px rgba(220, 38, 38, 0.1),
+      0 0 80px rgba(220, 38, 38, 0.05),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08),
+      inset 0 0 30px rgba(220, 38, 38, 0.04),
+      0 30px 60px rgba(0, 0, 0, 0.5);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1px rgba(220, 38, 38, 0.3),
+      0 0 35px rgba(220, 38, 38, 0.4),
+      0 0 70px rgba(220, 38, 38, 0.2),
+      0 0 120px rgba(220, 38, 38, 0.1),
+      inset 0 1px 0 rgba(255, 255, 255, 0.12),
+      inset 0 0 40px rgba(220, 38, 38, 0.07),
+      0 30px 60px rgba(0, 0, 0, 0.5);
+  }
 }
 
 @keyframes slideUp {
-  from { opacity: 0; transform: translateY(30px); }
-  to { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; transform: translateY(40px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 .login-logo {
   text-align: center;
   margin-bottom: 36px;
+  padding-bottom: 28px;
+  border-bottom: 1px solid rgba(220, 38, 38, 0.18);
+  position: relative;
+}
+
+.login-logo::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 25%;
+  width: 50%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(220,38,38,0.6), transparent);
+  box-shadow: 0 0 8px rgba(220,38,38,0.4);
 }
 
 .login-logo h1 {
@@ -195,8 +296,11 @@ body {
 
 .login-btn:hover {
   background: var(--primary-dark);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px var(--primary-glow);
+  transform: translateY(-2px);
+  box-shadow:
+    0 4px 15px rgba(220, 38, 38, 0.5),
+    0 0 30px rgba(220, 38, 38, 0.25),
+    0 0 50px rgba(220, 38, 38, 0.1);
 }
 
 .login-btn:active { transform: translateY(0); }
@@ -222,6 +326,174 @@ body {
   0%, 100% { transform: translateX(0); }
   25% { transform: translateX(-5px); }
   75% { transform: translateX(5px); }
+}
+
+/* ============ BACKGROUND BUBBLES ============ */
+.bubble {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+
+/* Glass reflective bubble */
+.bubble-glass {
+  background: radial-gradient(
+    circle at 35% 30%,
+    rgba(255, 255, 255, 0.22) 0%,
+    rgba(220, 38, 38, 0.1) 35%,
+    rgba(185, 28, 28, 0.06) 60%,
+    rgba(0, 0, 0, 0.08) 100%
+  );
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  box-shadow:
+    inset 0 0 12px rgba(220, 38, 38, 0.12),
+    inset -4px -4px 10px rgba(0, 0, 0, 0.18),
+    0 6px 20px rgba(0, 0, 0, 0.25),
+    0 0 25px rgba(220, 38, 38, 0.04);
+}
+
+.bubble-glass::before {
+  content: '';
+  position: absolute;
+  top: 12%;
+  left: 18%;
+  width: 30%;
+  height: 22%;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at 40% 40%, rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0.1) 60%, transparent 100%);
+  transform: rotate(-30deg);
+}
+
+.bubble-glass::after {
+  content: '';
+  position: absolute;
+  bottom: 20%;
+  right: 15%;
+  width: 12%;
+  height: 12%;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* Glowing red bubble */
+.bubble-glow {
+  background: radial-gradient(
+    circle at 40% 38%,
+    rgba(220, 38, 38, 0.35) 0%,
+    rgba(185, 28, 28, 0.18) 45%,
+    rgba(139, 0, 0, 0.08) 70%,
+    transparent 100%
+  );
+  border: 1px solid rgba(220, 38, 38, 0.25);
+  box-shadow:
+    0 0 18px rgba(220, 38, 38, 0.25),
+    0 0 40px rgba(220, 38, 38, 0.12),
+    inset 0 0 18px rgba(220, 38, 38, 0.12);
+}
+
+/* Crystal shimmer bubble */
+.bubble-crystal {
+  background: radial-gradient(
+    circle at 30% 25%,
+    rgba(255, 180, 180, 0.18) 0%,
+    rgba(220, 38, 38, 0.07) 40%,
+    transparent 70%
+  );
+  border: 1px solid rgba(220, 100, 100, 0.2);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+}
+
+.bubble-crystal::before {
+  content: '';
+  position: absolute;
+  top: 8%;
+  left: 22%;
+  width: 54%;
+  height: 36%;
+  border-radius: 50%;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.18) 0%, transparent 65%);
+  transform: rotate(-18deg);
+}
+
+.bubble-crystal::after {
+  content: '';
+  position: absolute;
+  bottom: 15%;
+  right: 18%;
+  width: 18%;
+  height: 10%;
+  border-radius: 50%;
+  background: rgba(255, 150, 150, 0.2);
+}
+
+/* Ghost / translucent white bubble */
+.bubble-ghost {
+  background: radial-gradient(
+    circle at 38% 32%,
+    rgba(255, 255, 255, 0.12) 0%,
+    rgba(255, 255, 255, 0.04) 50%,
+    transparent 80%
+  );
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.bubble-ghost::before {
+  content: '';
+  position: absolute;
+  top: 14%;
+  left: 20%;
+  width: 28%;
+  height: 18%;
+  border-radius: 50%;
+  background: radial-gradient(ellipse, rgba(255,255,255,0.35) 0%, transparent 70%);
+}
+
+/* Tiny sparkle dot */
+.bubble-dot {
+  background: radial-gradient(circle at 40% 35%, rgba(255, 200, 200, 0.8) 0%, rgba(220, 38, 38, 0.4) 50%, transparent 80%);
+  box-shadow: 0 0 6px rgba(220, 38, 38, 0.5), 0 0 12px rgba(220, 38, 38, 0.2);
+}
+
+/* === Bubble Float Animations === */
+@keyframes floatA {
+  0%, 100% { transform: translateY(0px) translateX(0px) scale(1); opacity: var(--op, 0.7); }
+  33%       { transform: translateY(-28px) translateX(14px) scale(1.04); opacity: calc(var(--op, 0.7) * 1.2); }
+  66%       { transform: translateY(-12px) translateX(-9px) scale(0.97); opacity: calc(var(--op, 0.7) * 0.85); }
+}
+
+@keyframes floatB {
+  0%, 100% { transform: translateY(0px) translateX(0px); opacity: var(--op, 0.6); }
+  25%       { transform: translateY(-38px) translateX(-20px); opacity: calc(var(--op, 0.6) * 1.3); }
+  50%       { transform: translateY(-22px) translateX(12px); opacity: calc(var(--op, 0.6) * 0.9); }
+  75%       { transform: translateY(-42px) translateX(6px); opacity: calc(var(--op, 0.6) * 1.1); }
+}
+
+@keyframes floatC {
+  0%, 100% { transform: translateY(0px) rotate(0deg) scale(1); opacity: var(--op, 0.5); }
+  50%       { transform: translateY(-24px) rotate(12deg) scale(1.06); opacity: calc(var(--op, 0.5) * 1.4); }
+}
+
+@keyframes floatSpin {
+  0%   { transform: translateY(0px)   translateX(0px)   rotate(0deg)   scale(1); }
+  25%  { transform: translateY(-18px) translateX(22px)  rotate(90deg)  scale(1.05); }
+  50%  { transform: translateY(-32px) translateX(0px)   rotate(180deg) scale(0.95); }
+  75%  { transform: translateY(-18px) translateX(-22px) rotate(270deg) scale(1.05); }
+  100% { transform: translateY(0px)   translateX(0px)   rotate(360deg) scale(1); }
+}
+
+@keyframes drift {
+  0%, 100% { transform: translate(0, 0)     rotate(0deg);   opacity: var(--op, 0.6); }
+  20%       { transform: translate(16px, -22px)  rotate(6deg);  opacity: calc(var(--op, 0.6) * 1.2); }
+  40%       { transform: translate(-12px, -38px) rotate(-4deg); opacity: calc(var(--op, 0.6) * 0.8); }
+  60%       { transform: translate(22px, -28px)  rotate(8deg);  opacity: calc(var(--op, 0.6) * 1.3); }
+  80%       { transform: translate(-6px, -16px)  rotate(-6deg); opacity: calc(var(--op, 0.6) * 0.9); }
+}
+
+@keyframes twinkle {
+  0%, 100% { transform: scale(1);   opacity: var(--op, 0.8); box-shadow: 0 0 6px rgba(220,38,38,0.5); }
+  50%       { transform: scale(1.5); opacity: 1;              box-shadow: 0 0 12px rgba(220,38,38,0.9), 0 0 20px rgba(220,38,38,0.4); }
 }
 
 /* ============ DASHBOARD LAYOUT ============ */
