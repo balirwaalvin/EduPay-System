@@ -76,12 +76,24 @@ async function loadPayslips() {
             return;
         }
         tbody.innerHTML = payslips.map(p => {
-            const allowances = (p.housing_allowance || 0) + (p.transport_allowance || 0) + (p.medical_allowance || 0) + (p.other_allowance || 0);
+            const housing   = parseFloat(p.housing_allowance)   || 0;
+            const transport = parseFloat(p.transport_allowance) || 0;
+            const medical   = parseFloat(p.medical_allowance)   || 0;
+            const other     = parseFloat(p.other_allowance)     || 0;
+            const totalAllowances = housing + transport + medical + other;
+            const allowanceBreakdown = `
+              <div class="salary-breakdown">
+                <div class="breakdown-row"><span>Housing</span><span>${formatCurrency(housing)}</span></div>
+                <div class="breakdown-row"><span>Transport</span><span>${formatCurrency(transport)}</span></div>
+                <div class="breakdown-row"><span>Medical</span><span>${formatCurrency(medical)}</span></div>
+                <div class="breakdown-row"><span>Other</span><span>${formatCurrency(other)}</span></div>
+                <div class="breakdown-row breakdown-total"><span>Total</span><span>${formatCurrency(totalAllowances)}</span></div>
+              </div>`;
             return `
         <tr>
           <td><strong>${getMonthName(p.month)} ${p.year}</strong></td>
           <td>${formatCurrency(p.basic_salary)}</td>
-          <td>${formatCurrency(allowances)}</td>
+          <td>${allowanceBreakdown}</td>
           <td>${formatCurrency(p.total_deductions)}</td>
           <td><strong>${formatCurrency(p.net_salary)}</strong></td>
           <td><span class="badge ${p.payment_status === 'Paid' ? 'badge-success' : 'badge-warning'}">${p.payment_status}</span></td>
