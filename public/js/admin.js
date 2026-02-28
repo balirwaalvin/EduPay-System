@@ -88,11 +88,11 @@ function editUser(id) {
 async function saveUser() {
     const editId = document.getElementById('editUserId').value;
     const data = {
-        full_name: document.getElementById('userFullName').value,
-        username: document.getElementById('userUsername').value,
+        full_name: document.getElementById('userFullName').value.trim(),
+        username: document.getElementById('userUsername').value.trim(),
         role: document.getElementById('userRole').value,
-        email: document.getElementById('userEmail').value,
-        phone: document.getElementById('userPhone').value,
+        email: document.getElementById('userEmail').value.trim(),
+        phone: document.getElementById('userPhone').value.trim(),
     };
 
     if (!data.full_name || !data.username) {
@@ -111,10 +111,13 @@ async function saveUser() {
             showToast('User created successfully');
         }
         closeModal('userModal');
-        document.getElementById('userUsername').disabled = false;
         loadUsers();
         loadDashboard();
-    } catch (err) { showToast(err.message, 'error'); }
+    } catch (err) {
+        showToast(err.message || 'Failed to save user', 'error');
+    } finally {
+        document.getElementById('userUsername').disabled = false;
+    }
 }
 
 async function deleteUser(id) {

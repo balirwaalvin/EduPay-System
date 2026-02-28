@@ -66,17 +66,43 @@ router.post('/users', (req, res) => {
 // PUT /api/admin/users/:id
 router.put('/users/:id', (req, res) => {
     try {
-        const { full_name, email, phone, role, is_active } = req.body;
+        const { full_name, email, phone, role } = req.body;
+        const id = parseInt(req.params.id);
+
+        if (!full_name || !role) {
+            return res.status(400).json({ error: 'Full name and role are required.' });
+        }
+
         const db = getDb();
+
+        // Check user exists
+        const existing = db.exec("SELECT id FROM users WHERE id = ?", [id]);
+        if (!existing.length || !existing[0].values.length) {
+            return res.status(404).json({ error: 'User not found.' });
+        }
+
         db.run(
-            `UPDATE users SET full_name = COALESCE(?, full_name), email = COALESCE(?, email), phone = COALESCE(?, phone), role = COALESCE(?, role), is_active = COALESCE(?, is_active), updated_at = datetime('now') WHERE id = ?`,
-            [full_name, email, phone, role, is_active, req.params.id]
+            `UPDATE users SET
+               full_name = ?,
+               email     = ?,
+               phone     = ?,
+               role      = ?,
+               updated_at = datetime('now')
+             WHERE id = ?`,
+            [
+                full_name,
+                email  || null,
+                phone  || null,
+                role,
+                id
+            ]
         );
         saveDatabase();
         logAudit(db, saveDatabase, req.user.id, req.user.username, 'UPDATE_USER',
-            `Updated user ID: ${req.params.id}`, req.ip);
+            `Updated user ID: ${id}`, req.ip);
         res.json({ message: 'User updated successfully.' });
     } catch (err) {
+        console.error('Update user error:', err);
         res.status(500).json({ error: 'Failed to update user.' });
     }
 });

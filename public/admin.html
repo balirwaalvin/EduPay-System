@@ -336,7 +336,7 @@
         <div class="modal">
             <div class="modal-header">
                 <h3 id="userModalTitle">Add New User</h3>
-                <button class="modal-close" onclick="closeModal('userModal')">✕</button>
+                <button class="modal-close" onclick="closeModal('userModal'); document.getElementById('userUsername').disabled = false;">✕</button>
             </div>
             <div class="modal-body">
                 <form id="userForm">
@@ -374,7 +374,7 @@
                 </form>
             </div>
             <div class="modal-footer">
-                <button class="btn btn-secondary" onclick="closeModal('userModal')">Cancel</button>
+                <button class="btn btn-secondary" onclick="closeModal('userModal'); document.getElementById('userUsername').disabled = false;">Cancel</button>
                 <button class="btn btn-primary" onclick="saveUser()">Save User</button>
             </div>
         </div>
