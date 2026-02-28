@@ -6,6 +6,7 @@ document.addEventListener('DOMContentLoaded', () => {
     loadDashboard();
     loadUsers();
     loadTeachers();
+    loadAccountants();
     loadSalaryStructures();
     loadConfig();
     loadReports();
@@ -155,6 +156,100 @@ async function resetPassword() {
         await apiRequest(`/admin/users/${id}/reset-password`, { method: 'POST', body: { new_password: newPwd } });
         showToast('Password reset successfully');
         closeModal('resetPwdModal');
+    } catch (err) { showToast(err.message, 'error'); }
+}
+
+// ============ ACCOUNTANTS ============
+let allAccountants = [];
+
+async function loadAccountants() {
+    try {
+        allAccountants = await apiRequest('/admin/accountants');
+        renderAccountantsTable();
+    } catch (err) { showToast('Failed to load accountants', 'error'); }
+}
+
+function renderAccountantsTable() {
+    const tbody = document.getElementById('accountantsTableBody');
+    if (!allAccountants.length) {
+        tbody.innerHTML = '<tr><td colspan="8" class="text-center" style="padding:32px;color:var(--text-light);">No accountants found</td></tr>';
+        return;
+    }
+    tbody.innerHTML = allAccountants.map(a => `
+    <tr>
+      <td><strong>${a.employee_id}</strong></td>
+      <td>${a.full_name}</td>
+      <td>${a.department || '-'}</td>
+      <td>${a.phone || '-'}</td>
+      <td>${a.email || '-'}</td>
+      <td>${a.date_joined ? formatDate(a.date_joined) : '-'}</td>
+      <td><span class="badge ${a.account_active ? 'badge-success' : 'badge-gray'}">${a.account_active ? 'Active' : 'Inactive'}</span></td>
+      <td>
+        <div class="action-btns">
+          <button class="btn btn-sm btn-secondary" onclick="editAccountant(${a.id})">Edit</button>
+          <button class="btn btn-sm btn-danger" onclick="deleteAccountant(${a.id})">Delete</button>
+        </div>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function showCreateAccountantModal() {
+    document.getElementById('accountantModalTitle').textContent = 'Add New Accountant';
+    document.getElementById('editAccountantId').value = '';
+    document.getElementById('accountantForm').reset();
+    openModal('accountantModal');
+}
+
+function editAccountant(id) {
+    const acc = allAccountants.find(a => a.id === id);
+    if (!acc) return;
+    document.getElementById('accountantModalTitle').textContent = 'Edit Accountant';
+    document.getElementById('editAccountantId').value = id;
+    document.getElementById('accountantFullName').value = acc.full_name;
+    document.getElementById('accountantDepartment').value = acc.department || '';
+    document.getElementById('accountantEmail').value = acc.email || '';
+    document.getElementById('accountantPhone').value = acc.phone || '';
+    document.getElementById('accountantDateJoined').value = acc.date_joined || '';
+    openModal('accountantModal');
+}
+
+async function saveAccountant() {
+    const editId = document.getElementById('editAccountantId').value;
+    const data = {
+        full_name: document.getElementById('accountantFullName').value.trim(),
+        department: document.getElementById('accountantDepartment').value.trim(),
+        email: document.getElementById('accountantEmail').value.trim(),
+        phone: document.getElementById('accountantPhone').value.trim(),
+        date_joined: document.getElementById('accountantDateJoined').value,
+    };
+    if (!data.full_name) {
+        showToast('Full name is required', 'error');
+        return;
+    }
+    try {
+        if (editId) {
+            await apiRequest(`/admin/accountants/${editId}`, { method: 'PUT', body: data });
+            showToast('Accountant updated successfully');
+        } else {
+            const result = await apiRequest('/admin/accountants', { method: 'POST', body: data });
+            showToast(`Accountant added! Username: ${result.accountant.username}, Default password: accountant123`);
+        }
+        closeModal('accountantModal');
+        loadAccountants();
+        loadUsers();
+        loadDashboard();
+    } catch (err) { showToast(err.message || 'Failed to save accountant', 'error'); }
+}
+
+async function deleteAccountant(id) {
+    if (!confirm('Are you sure you want to remove this accountant? This will also delete their user account.')) return;
+    try {
+        await apiRequest(`/admin/accountants/${id}`, { method: 'DELETE' });
+        showToast('Accountant removed');
+        loadAccountants();
+        loadUsers();
+        loadDashboard();
     } catch (err) { showToast(err.message, 'error'); }
 }
 
@@ -467,6 +562,7 @@ switchSection = function (sectionId) {
         dashboard: 'Dashboard',
         users: 'User Management',
         teachers: 'Teacher Management',
+        accountants: 'Accountant Management',
         salary: 'Salary Structure',
         config: 'System Configuration',
         reports: 'Reports & Monitoring',

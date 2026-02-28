@@ -196,6 +196,88 @@ router.delete('/teachers/:id', async (req, res) => {
     } catch (err) { res.status(500).json({ error: 'Failed to delete teacher.' }); }
 });
 
+// ============ ACCOUNTANT MANAGEMENT ============
+
+router.get('/accountants', async (req, res) => {
+    try {
+        const db = getDb();
+        const { rows } = await db.query(`
+            SELECT a.*, u.username, u.is_active as account_active
+            FROM accountants a LEFT JOIN users u ON a.user_id = u.id
+            ORDER BY a.created_at DESC
+        `);
+        res.json(rows);
+    } catch (err) { res.status(500).json({ error: 'Failed to fetch accountants.' }); }
+});
+
+router.post('/accountants', async (req, res) => {
+    try {
+        const { full_name, email, phone, department, date_joined } = req.body;
+        if (!full_name) return res.status(400).json({ error: 'Full name is required.' });
+        const db = getDb();
+        const baseUsername = full_name.toLowerCase().replace(/\s+/g, '.').replace(/[^a-z.]/g, '');
+        let uniqueUsername = baseUsername;
+        let counter = 1;
+        while ((await db.query("SELECT id FROM users WHERE username = $1", [uniqueUsername])).rows.length) {
+            uniqueUsername = baseUsername + counter++;
+        }
+        const defaultPassword = bcrypt.hashSync('accountant123', 10);
+        const { rows: [newUser] } = await db.query(
+            `INSERT INTO users (username, password, role, full_name, email, phone, must_change_password)
+             VALUES ($1,$2,'accountant',$3,$4,$5,1) RETURNING id`,
+            [uniqueUsername, defaultPassword, full_name, email || '', phone || '']
+        );
+        const empId = 'ACC' + String(newUser.id).padStart(4, '0');
+        await db.query(
+            `INSERT INTO accountants (user_id, employee_id, full_name, email, phone, department, date_joined)
+             VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+            [newUser.id, empId, full_name, email || '', phone || '', department || '', date_joined || new Date().toISOString().split('T')[0]]
+        );
+        logAudit(db, req.user.id, req.user.username, 'CREATE_ACCOUNTANT', `Added accountant: ${full_name} (${empId})`, req.ip);
+        res.status(201).json({
+            message: 'Accountant added successfully.',
+            accountant: { employee_id: empId, username: uniqueUsername, default_password: 'accountant123' }
+        });
+    } catch (err) {
+        console.error('Create accountant error:', err);
+        res.status(500).json({ error: 'Failed to add accountant.' });
+    }
+});
+
+router.put('/accountants/:id', async (req, res) => {
+    try {
+        const { full_name, email, phone, department } = req.body;
+        const db = getDb();
+        await db.query(
+            `UPDATE accountants SET
+                full_name=COALESCE($1,full_name), email=COALESCE($2,email), phone=COALESCE($3,phone),
+                department=COALESCE($4,department), updated_at=NOW()
+             WHERE id=$5`,
+            [full_name || null, email || null, phone || null, department || null, req.params.id]
+        );
+        const { rows: [acc] } = await db.query("SELECT user_id FROM accountants WHERE id = $1", [req.params.id]);
+        if (acc && acc.user_id) {
+            await db.query(
+                "UPDATE users SET full_name=COALESCE($1,full_name), email=COALESCE($2,email), phone=COALESCE($3,phone), updated_at=NOW() WHERE id=$4",
+                [full_name || null, email || null, phone || null, acc.user_id]
+            );
+        }
+        logAudit(db, req.user.id, req.user.username, 'UPDATE_ACCOUNTANT', `Updated accountant ID: ${req.params.id}`, req.ip);
+        res.json({ message: 'Accountant updated successfully.' });
+    } catch (err) { res.status(500).json({ error: 'Failed to update accountant.' }); }
+});
+
+router.delete('/accountants/:id', async (req, res) => {
+    try {
+        const db = getDb();
+        const { rows: [acc] } = await db.query("SELECT user_id FROM accountants WHERE id = $1", [req.params.id]);
+        await db.query("DELETE FROM accountants WHERE id = $1", [req.params.id]);
+        if (acc && acc.user_id) await db.query("DELETE FROM users WHERE id = $1", [acc.user_id]);
+        logAudit(db, req.user.id, req.user.username, 'DELETE_ACCOUNTANT', `Deleted accountant ID: ${req.params.id}`, req.ip);
+        res.json({ message: 'Accountant removed successfully.' });
+    } catch (err) { res.status(500).json({ error: 'Failed to delete accountant.' }); }
+});
+
 // ============ SALARY STRUCTURES ============
 
 router.get('/salary-structures', async (req, res) => {

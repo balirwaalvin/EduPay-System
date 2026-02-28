@@ -31,6 +31,9 @@
                     <div class="nav-item" data-section="teachers" onclick="switchSection('teachers')">
                         <span class="nav-icon">🎓</span> Teacher Management
                     </div>
+                    <div class="nav-item" data-section="accountants" onclick="switchSection('accountants')">
+                        <span class="nav-icon">🧾</span> Accountant Management
+                    </div>
                     <div class="nav-item" data-section="salary" onclick="switchSection('salary')">
                         <span class="nav-icon">💰</span> Salary Structure
                     </div>
@@ -104,6 +107,8 @@
                             <button class="btn btn-primary" onclick="switchSection('users')">👥 Manage Users</button>
                             <button class="btn btn-primary" onclick="switchSection('teachers')">🎓 Manage
                                 Teachers</button>
+                            <button class="btn btn-primary" onclick="switchSection('accountants')">🧾 Manage
+                                Accountants</button>
                             <button class="btn btn-primary" onclick="switchSection('salary')">💰 Salary
                                 Structure</button>
                             <button class="btn btn-secondary" onclick="switchSection('config')">⚙️ System
@@ -118,7 +123,7 @@
                     <div class="card">
                         <div class="card-header">
                             <h3>User Management</h3>
-                            <button class="btn btn-primary" onclick="showCreateUserModal()">+ Add User</button>
+                            <small style="color:var(--text-secondary);font-size:12px;">Users are created from their respective portals</small>
                         </div>
                         <div class="card-body">
                             <div class="table-responsive">
@@ -135,6 +140,35 @@
                                         </tr>
                                     </thead>
                                     <tbody id="usersTableBody"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Accountant Management -->
+                <div id="accountants" class="page-section">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Accountant Management</h3>
+                            <button class="btn btn-primary" onclick="showCreateAccountantModal()">+ Add Accountant</button>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>Employee ID</th>
+                                            <th>Full Name</th>
+                                            <th>Department</th>
+                                            <th>Phone</th>
+                                            <th>Email</th>
+                                            <th>Date Joined</th>
+                                            <th>Status</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="accountantsTableBody"></tbody>
                                 </table>
                             </div>
                         </div>
@@ -376,6 +410,47 @@
             <div class="modal-footer">
                 <button class="btn btn-secondary" onclick="closeModal('userModal'); document.getElementById('userUsername').disabled = false;">Cancel</button>
                 <button class="btn btn-primary" onclick="saveUser()">Save User</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create/Edit Accountant Modal -->
+    <div id="accountantModal" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 id="accountantModalTitle">Add New Accountant</h3>
+                <button class="modal-close" onclick="closeModal('accountantModal')">✕</button>
+            </div>
+            <div class="modal-body">
+                <form id="accountantForm">
+                    <input type="hidden" id="editAccountantId">
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label>Full Name *</label>
+                            <input type="text" id="accountantFullName" class="form-control" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Department</label>
+                            <input type="text" id="accountantDepartment" class="form-control" placeholder="e.g. Finance">
+                        </div>
+                        <div class="form-group">
+                            <label>Email</label>
+                            <input type="email" id="accountantEmail" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label>Phone</label>
+                            <input type="text" id="accountantPhone" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label>Date Joined</label>
+                            <input type="date" id="accountantDateJoined" class="form-control">
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('accountantModal')">Cancel</button>
+                <button class="btn btn-primary" onclick="saveAccountant()">Save Accountant</button>
             </div>
         </div>
     </div>

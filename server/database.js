@@ -55,6 +55,22 @@ async function createTables() {
   `);
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS accountants (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER REFERENCES users(id),
+      employee_id TEXT UNIQUE NOT NULL,
+      full_name TEXT NOT NULL,
+      email TEXT,
+      phone TEXT,
+      department TEXT,
+      date_joined TEXT,
+      is_active INTEGER DEFAULT 1,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    )
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS salary_structures (
       id SERIAL PRIMARY KEY,
       salary_scale TEXT NOT NULL,
