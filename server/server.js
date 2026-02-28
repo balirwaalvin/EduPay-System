@@ -17,8 +17,14 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Serve static files
-app.use(express.static(path.join(__dirname, '..', 'public')));
+// Serve static files (no browser caching so code changes are always picked up)
+app.use(express.static(path.join(__dirname, '..', 'public'), {
+    setHeaders: (res, filePath) => {
+        if (filePath.endsWith('.js') || filePath.endsWith('.html') || filePath.endsWith('.css')) {
+            res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+        }
+    }
+}));
 
 // API Routes
 app.use('/api/auth', authRoutes);

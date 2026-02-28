@@ -18,7 +18,7 @@ router.get('/teachers', async (req, res) => {
                    s.other_allowance, s.tax_percentage, s.nssf_percentage, s.loan_deduction, s.other_deduction
             FROM teachers t
             LEFT JOIN salary_structures s ON t.salary_scale = s.salary_scale
-            WHERE t.is_active = true
+            WHERE t.is_active = 1
             ORDER BY t.full_name
         `);
         res.json(rows);
@@ -67,7 +67,7 @@ router.post('/payroll/process', async (req, res) => {
                    s.other_allowance, s.tax_percentage, s.nssf_percentage, s.loan_deduction, s.other_deduction
             FROM teachers t
             LEFT JOIN salary_structures s ON t.salary_scale = s.salary_scale
-            WHERE t.is_active = true
+            WHERE t.is_active = 1
         `);
         if (!teacherList.length)
             return res.status(400).json({ error: 'No active teachers found.' });
@@ -474,7 +474,7 @@ router.get('/stats', async (req, res) => {
     try {
         const db = getDb();
         const [teachersR, payrollsR, pendingR, latestR, paidR] = await Promise.all([
-            db.query("SELECT COUNT(*) as cnt FROM teachers WHERE is_active = true"),
+            db.query("SELECT COUNT(*) as cnt FROM teachers WHERE is_active = 1"),
             db.query("SELECT COUNT(*) as cnt FROM payroll"),
             db.query("SELECT COUNT(*) as cnt FROM payroll WHERE status IN ('draft','processed')"),
             db.query("SELECT * FROM payroll ORDER BY created_at DESC LIMIT 1"),

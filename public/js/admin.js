@@ -18,16 +18,19 @@ document.addEventListener('DOMContentLoaded', () => {
 async function loadDashboard() {
     try {
         const stats = await apiRequest('/admin/stats');
-        document.getElementById('statUsers').textContent = stats.total_users;
-        document.getElementById('statTeachers').textContent = stats.total_teachers;
-        document.getElementById('statAccountants').textContent = stats.total_accountants;
-        document.getElementById('statAdmins').textContent = stats.total_admins;
-        document.getElementById('statPayrolls').textContent = stats.total_payrolls;
+        const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+        set('statUsers', stats.total_users);
+        set('statTeachers', stats.total_teachers);
+        set('statAccountants', stats.total_accountants);
+        set('statAdmins', stats.total_admins);
+        set('statPayrolls', stats.total_payrolls);
         if (stats.recent_payroll) {
-            document.getElementById('statLatestPayroll').textContent =
-                `${getMonthName(stats.recent_payroll.month)} ${stats.recent_payroll.year}`;
+            set('statLatestPayroll', `${getMonthName(stats.recent_payroll.month)} ${stats.recent_payroll.year}`);
         }
-    } catch (err) { console.error('Dashboard error:', err); }
+    } catch (err) {
+        console.error('Dashboard error:', err);
+        showToast('Failed to load dashboard stats', 'error');
+    }
 }
 
 // ============ ADMINS ============
