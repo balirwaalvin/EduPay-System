@@ -187,7 +187,7 @@ router.get('/notifications', async (req, res) => {
 router.put('/notifications/:id/read', async (req, res) => {
     try {
         const db = getDb();
-        await db.query("UPDATE notifications SET is_read = true WHERE id = $1 AND user_id = $2", [req.params.id, req.user.id]);
+        await db.query("UPDATE notifications SET is_read = 1 WHERE id = $1 AND user_id = $2", [req.params.id, req.user.id]);
         res.json({ message: 'Notification marked as read.' });
     } catch (err) { res.status(500).json({ error: 'Failed to update notification.' }); }
 });
@@ -196,7 +196,7 @@ router.put('/notifications/:id/read', async (req, res) => {
 router.put('/notifications/read-all', async (req, res) => {
     try {
         const db = getDb();
-        await db.query("UPDATE notifications SET is_read = true WHERE user_id = $1", [req.user.id]);
+        await db.query("UPDATE notifications SET is_read = 1 WHERE user_id = $1", [req.user.id]);
         res.json({ message: 'All notifications marked as read.' });
     } catch (err) { res.status(500).json({ error: 'Failed to update notifications.' }); }
 });
