@@ -829,6 +829,38 @@ tbody tr:hover {
   background: var(--gray-100);
 }
 
+/* ============ SALARY BREAKDOWN ============ */
+.salary-breakdown {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 180px;
+    font-size: 12px;
+}
+.breakdown-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 2px 0;
+    color: var(--text-light);
+    border-bottom: 1px dashed var(--gray-200);
+}
+.breakdown-row:last-child {
+    border-bottom: none;
+}
+.breakdown-row span:last-child {
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+.breakdown-total {
+    margin-top: 3px;
+    padding-top: 4px;
+    border-top: 1.5px solid var(--gray-300) !important;
+    border-bottom: none !important;
+    font-weight: 600;
+    color: var(--text-main, #1a1a2e);
+}
+
 /* ============ BADGES ============ */
 .badge {
   display: inline-flex;

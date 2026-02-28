@@ -34,8 +34,27 @@ async function loadTeacherRecords() {
             return;
         }
         tbody.innerHTML = teachers.map(t => {
-            const totalAllowances = (t.housing_allowance || 0) + (t.transport_allowance || 0) + (t.medical_allowance || 0) + (t.other_allowance || 0);
-            const totalDeductions = `Tax: ${t.tax_percentage || 0}%, NSSF: ${t.nssf_percentage || 0}%`;
+            const housing   = parseFloat(t.housing_allowance)   || 0;
+            const transport = parseFloat(t.transport_allowance) || 0;
+            const medical   = parseFloat(t.medical_allowance)   || 0;
+            const other     = parseFloat(t.other_allowance)     || 0;
+            const totalAllowances = housing + transport + medical + other;
+
+            const allowanceBreakdown = `
+              <div class="salary-breakdown">
+                <div class="breakdown-row"><span>Housing</span><span>${formatCurrency(housing)}</span></div>
+                <div class="breakdown-row"><span>Transport</span><span>${formatCurrency(transport)}</span></div>
+                <div class="breakdown-row"><span>Medical</span><span>${formatCurrency(medical)}</span></div>
+                <div class="breakdown-row"><span>Other</span><span>${formatCurrency(other)}</span></div>
+                <div class="breakdown-row breakdown-total"><span>Total</span><span>${formatCurrency(totalAllowances)}</span></div>
+              </div>`;
+
+            const deductionBreakdown = `
+              <div class="salary-breakdown">
+                <div class="breakdown-row"><span>Tax (PAYE)</span><span>${t.tax_percentage || 0}%</span></div>
+                <div class="breakdown-row"><span>NSSF</span><span>${t.nssf_percentage || 0}%</span></div>
+              </div>`;
+
             return `
         <tr>
           <td><strong>${t.employee_id}</strong></td>
@@ -43,8 +62,8 @@ async function loadTeacherRecords() {
           <td>${t.position || '-'}</td>
           <td><span class="badge badge-info">${t.salary_scale}</span></td>
           <td>${formatCurrency(t.basic_salary)}</td>
-          <td>${formatCurrency(totalAllowances)}</td>
-          <td>${totalDeductions}</td>
+          <td>${allowanceBreakdown}</td>
+          <td>${deductionBreakdown}</td>
         </tr>
       `;
         }).join('');
