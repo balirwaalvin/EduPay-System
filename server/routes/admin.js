@@ -472,8 +472,8 @@ router.get('/stats', async (req, res) => {
         const db = getDb();
         const [usersR, teachersR, accountantsR, adminsR, payrollsR, recentR] = await Promise.all([
             db.query("SELECT COUNT(*) as cnt FROM users"),
-            db.query("SELECT COUNT(*) as cnt FROM teachers WHERE is_active = true"),
-            db.query("SELECT COUNT(*) as cnt FROM accountants WHERE is_active = true"),
+            db.query("SELECT COUNT(*) as cnt FROM teachers WHERE is_active = 1"),
+            db.query("SELECT COUNT(*) as cnt FROM accountants WHERE is_active = 1"),
             db.query("SELECT COUNT(*) as cnt FROM users WHERE role = 'admin'"),
             db.query("SELECT COUNT(*) as cnt FROM payroll"),
             db.query("SELECT * FROM payroll ORDER BY created_at DESC LIMIT 1"),
