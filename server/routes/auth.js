@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
-const { getDb, saveDatabase } = require('../database');
+const { getDb } = require('../database');
 const { authenticateToken, logAudit, JWT_SECRET } = require('../middleware');
 
 // POST /api/auth/login
@@ -14,15 +14,10 @@ router.post('/login', (req, res) => {
         }
 
         const db = getDb();
-        const result = db.exec("SELECT * FROM users WHERE username = ?", [username]);
-        if (result.length === 0 || result[0].values.length === 0) {
+        const user = db.prepare("SELECT * FROM users WHERE username = ?").get(username);
+        if (!user) {
             return res.status(401).json({ error: 'Invalid username or password.' });
         }
-
-        const columns = result[0].columns;
-        const row = result[0].values[0];
-        const user = {};
-        columns.forEach((col, i) => { user[col] = row[i]; });
 
         if (!user.is_active) {
             return res.status(403).json({ error: 'Account is deactivated. Contact admin.' });
@@ -39,7 +34,7 @@ router.post('/login', (req, res) => {
             { expiresIn: '8h' }
         );
 
-        logAudit(db, saveDatabase, user.id, user.username, 'LOGIN', 'User logged in', req.ip);
+        logAudit(db, user.id, user.username, 'LOGIN', 'User logged in', req.ip);
 
         res.json({
             token,
@@ -71,22 +66,20 @@ router.post('/change-password', authenticateToken, (req, res) => {
         }
 
         const db = getDb();
-        const result = db.exec("SELECT password FROM users WHERE id = ?", [req.user.id]);
-        if (result.length === 0 || result[0].values.length === 0) {
+        const row = db.prepare("SELECT password FROM users WHERE id = ?").get(req.user.id);
+        if (!row) {
             return res.status(404).json({ error: 'User not found.' });
         }
 
-        const currentHash = result[0].values[0][0];
-        if (!bcrypt.compareSync(current_password, currentHash)) {
+        if (!bcrypt.compareSync(current_password, row.password)) {
             return res.status(401).json({ error: 'Current password is incorrect.' });
         }
 
         const newHash = bcrypt.hashSync(new_password, 10);
-        db.run("UPDATE users SET password = ?, must_change_password = 0, updated_at = datetime('now') WHERE id = ?",
-            [newHash, req.user.id]);
-        saveDatabase();
+        db.prepare("UPDATE users SET password = ?, must_change_password = 0, updated_at = datetime('now') WHERE id = ?")
+          .run(newHash, req.user.id);
 
-        logAudit(db, saveDatabase, req.user.id, req.user.username, 'CHANGE_PASSWORD', 'Password changed', req.ip);
+        logAudit(db, req.user.id, req.user.username, 'CHANGE_PASSWORD', 'Password changed', req.ip);
 
         res.json({ message: 'Password changed successfully.' });
     } catch (err) {

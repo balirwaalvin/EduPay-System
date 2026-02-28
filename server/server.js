@@ -31,9 +31,9 @@ app.get('/accountant', (req, res) => res.sendFile(path.join(__dirname, '..', 'pu
 app.get('/teacher-portal', (req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'teacher.html')));
 
 // Start server
-async function start() {
+function start() {
     try {
-        await initDatabase();
+        initDatabase();
         app.listen(PORT, () => {
             console.log(`\n  ╔══════════════════════════════════════════╗`);
             console.log(`  ║   EduPay - School Payroll System          ║`);

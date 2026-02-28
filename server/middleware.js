@@ -25,12 +25,10 @@ function authorizeRoles(...roles) {
     };
 }
 
-function logAudit(db, saveDatabase, userId, username, action, details, ip) {
-    db.run(
-        "INSERT INTO audit_log (user_id, username, action, details, ip_address) VALUES (?, ?, ?, ?, ?)",
-        [userId, username, action, details, ip || '']
-    );
-    saveDatabase();
+function logAudit(db, userId, username, action, details, ip) {
+    db.prepare(
+        "INSERT INTO audit_log (user_id, username, action, details, ip_address) VALUES (?, ?, ?, ?, ?)"
+    ).run(userId, username, action, details, ip || '');
 }
 
 module.exports = { authenticateToken, authorizeRoles, logAudit, JWT_SECRET };

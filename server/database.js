@@ -1,4 +1,4 @@
-const initSqlJs = require('sql.js');
+const Database = require('better-sqlite3');
 const fs = require('fs');
 const path = require('path');
 const bcrypt = require('bcryptjs');
@@ -7,28 +7,19 @@ const DB_PATH = path.join(__dirname, '..', 'data', 'edupay.db');
 
 let db = null;
 
-async function initDatabase() {
-  const SQL = await initSqlJs();
+function initDatabase() {
   const dir = path.dirname(DB_PATH);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
-  if (fs.existsSync(DB_PATH)) {
-    const buffer = fs.readFileSync(DB_PATH);
-    db = new SQL.Database(buffer);
-  } else {
-    db = new SQL.Database();
-  }
+  db = new Database(DB_PATH);
+
+  // WAL mode: writes go directly to disk, crash-safe, faster concurrent reads
+  db.pragma('journal_mode = WAL');
+  db.pragma('foreign_keys = ON');
 
   createTables();
   seedDefaults();
-  saveDatabase();
   return db;
-}
-
-function saveDatabase() {
-  const data = db.export();
-  const buffer = Buffer.from(data);
-  fs.writeFileSync(DB_PATH, buffer);
 }
 
 function getDb() {
@@ -36,7 +27,7 @@ function getDb() {
 }
 
 function createTables() {
-  db.run(`
+  db.exec(`
     CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       username TEXT UNIQUE NOT NULL,
@@ -52,7 +43,7 @@ function createTables() {
     )
   `);
 
-  db.run(`
+  db.exec(`
     CREATE TABLE IF NOT EXISTS teachers (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER,
@@ -70,7 +61,7 @@ function createTables() {
     )
   `);
 
-  db.run(`
+  db.exec(`
     CREATE TABLE IF NOT EXISTS salary_structures (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       salary_scale TEXT NOT NULL,
@@ -88,7 +79,7 @@ function createTables() {
     )
   `);
 
-  db.run(`
+  db.exec(`
     CREATE TABLE IF NOT EXISTS payroll (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       month INTEGER NOT NULL,
@@ -106,7 +97,7 @@ function createTables() {
     )
   `);
 
-  db.run(`
+  db.exec(`
     CREATE TABLE IF NOT EXISTS payroll_items (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       payroll_id INTEGER NOT NULL,
@@ -130,7 +121,7 @@ function createTables() {
     )
   `);
 
-  db.run(`
+  db.exec(`
     CREATE TABLE IF NOT EXISTS notifications (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL,
@@ -142,7 +133,7 @@ function createTables() {
     )
   `);
 
-  db.run(`
+  db.exec(`
     CREATE TABLE IF NOT EXISTS audit_log (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER,
@@ -155,7 +146,7 @@ function createTables() {
     )
   `);
 
-  db.run(`
+  db.exec(`
     CREATE TABLE IF NOT EXISTS system_config (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       config_key TEXT UNIQUE NOT NULL,
@@ -167,52 +158,49 @@ function createTables() {
 
 function seedDefaults() {
   // Seed admin user
-  const adminExists = db.exec("SELECT id FROM users WHERE username = 'admin'");
-  if (adminExists.length === 0 || adminExists[0].values.length === 0) {
+  const adminExists = db.prepare("SELECT id FROM users WHERE username = 'admin'").get();
+  if (!adminExists) {
     const hashedPassword = bcrypt.hashSync('admin123', 10);
-    db.run(
+    db.prepare(
       `INSERT INTO users (username, password, role, full_name, email, must_change_password)
-       VALUES (?, ?, 'admin', 'System Administrator', 'admin@edupay.com', 0)`,
-      ['admin', hashedPassword]
-    );
+       VALUES (?, ?, 'admin', 'System Administrator', 'admin@edupay.com', 0)`
+    ).run('admin', hashedPassword);
   }
 
   // Seed default salary structures
-  const scalesExist = db.exec("SELECT id FROM salary_structures LIMIT 1");
-  if (scalesExist.length === 0 || scalesExist[0].values.length === 0) {
+  const scalesExist = db.prepare("SELECT id FROM salary_structures LIMIT 1").get();
+  if (!scalesExist) {
+    const insertScale = db.prepare(
+      `INSERT INTO salary_structures (salary_scale, basic_salary, housing_allowance, transport_allowance, medical_allowance, tax_percentage, nssf_percentage)
+       VALUES (?, ?, ?, ?, ?, ?, 5)`
+    );
     const scales = [
-      { scale: 'Scale_1', basic: 800000, housing: 100000, transport: 50000, medical: 30000, tax: 10 },
-      { scale: 'Scale_2', basic: 1200000, housing: 150000, transport: 80000, medical: 50000, tax: 15 },
-      { scale: 'Scale_3', basic: 1800000, housing: 200000, transport: 100000, medical: 80000, tax: 20 },
+      { scale: 'Scale_1', basic: 800000,  housing: 100000, transport: 50000,  medical: 30000,  tax: 10 },
+      { scale: 'Scale_2', basic: 1200000, housing: 150000, transport: 80000,  medical: 50000,  tax: 15 },
+      { scale: 'Scale_3', basic: 1800000, housing: 200000, transport: 100000, medical: 80000,  tax: 20 },
       { scale: 'Scale_4', basic: 2500000, housing: 300000, transport: 150000, medical: 100000, tax: 25 },
       { scale: 'Scale_5', basic: 3500000, housing: 400000, transport: 200000, medical: 150000, tax: 30 },
     ];
-    for (const s of scales) {
-      db.run(
-        `INSERT INTO salary_structures (salary_scale, basic_salary, housing_allowance, transport_allowance, medical_allowance, tax_percentage, nssf_percentage)
-         VALUES (?, ?, ?, ?, ?, ?, 5)`,
-        [s.scale, s.basic, s.housing, s.transport, s.medical, s.tax]
-      );
-    }
+    db.transaction((rows) => {
+      for (const s of rows) insertScale.run(s.scale, s.basic, s.housing, s.transport, s.medical, s.tax);
+    })(scales);
   }
 
   // Seed system config
-  const configExists = db.exec("SELECT id FROM system_config LIMIT 1");
-  if (configExists.length === 0 || configExists[0].values.length === 0) {
+  const configExists = db.prepare("SELECT id FROM system_config LIMIT 1").get();
+  if (!configExists) {
+    const insertConfig = db.prepare("INSERT INTO system_config (config_key, config_value) VALUES (?, ?)");
     const configs = [
-      { key: 'payroll_period', value: 'monthly' },
-      { key: 'currency', value: 'UGX' },
-      { key: 'school_name', value: 'EduPay School' },
-      { key: 'tax_enabled', value: 'true' },
-      { key: 'nssf_percentage', value: '5' },
+      ['payroll_period', 'monthly'],
+      ['currency',       'UGX'],
+      ['school_name',    'EduPay School'],
+      ['tax_enabled',    'true'],
+      ['nssf_percentage','5'],
     ];
-    for (const c of configs) {
-      db.run(
-        "INSERT INTO system_config (config_key, config_value) VALUES (?, ?)",
-        [c.key, c.value]
-      );
-    }
+    db.transaction((rows) => {
+      for (const [k, v] of rows) insertConfig.run(k, v);
+    })(configs);
   }
 }
 
-module.exports = { initDatabase, getDb, saveDatabase };
+module.exports = { initDatabase, getDb, DB_PATH };
