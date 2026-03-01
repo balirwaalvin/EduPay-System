@@ -35,15 +35,15 @@ services:
         scope: RUN_TIME
 
       - key: JWT_SECRET
-        value: ""          # ← Set this in the dashboard (mark as SECRET)
+        # ← Set the actual value in the App Platform dashboard under Environment Variables
         scope: RUN_TIME
         type: SECRET
 
-      # DATABASE_URL is automatically injected from the managed DB below.
-      # If you prefer to reference it manually, uncomment the next 3 lines:
-      # - key: DATABASE_URL
-      #   value: "${edupay-db.DATABASE_URL}"
-      #   scope: RUN_TIME
+      # Explicitly bind DATABASE_URL from the managed database component below.
+      # App Platform resolves ${edupay-db.DATABASE_URL} at deploy time.
+      - key: DATABASE_URL
+        value: "${edupay-db.DATABASE_URL}"
+        scope: RUN_TIME
 
     # Health check — App Platform will restart the dyno if this fails
     health_check:
@@ -56,4 +56,3 @@ databases:
     version: "16"
     size: db-s-dev-database   # free dev database; upgrade to db-s-1vcpu-1gb for production
     num_nodes: 1
-    # DATABASE_URL is automatically bound to the "web" service above
