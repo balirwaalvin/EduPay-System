@@ -7,6 +7,9 @@
         "start": "node server/server.js",
         "dev": "node server/server.js"
     },
+    "engines": {
+        "node": ">=20.0.0"
+    },
     "keywords": [
         "payroll",
         "school",

@@ -1,0 +1,59 @@
+# DigitalOcean App Platform specification
+# Docs: https://docs.digitalocean.com/products/app-platform/reference/app-spec/
+#
+# Usage:
+#   doctl apps create --spec .do/app.yaml
+#   — or — paste this into the App Platform dashboard's YAML editor.
+
+name: edupay-system
+region: nyc   # change to: ams, sfo, sgp, lon, fra, tor, blr, syd
+
+# ── Web Service ──────────────────────────────────────────────────────────────
+services:
+  - name: web
+    github:
+      repo: balirwaalvin/EduPay-System
+      branch: main
+      deploy_on_push: true
+
+    # Build & run
+    build_command: npm install --production
+    run_command: npm start
+    environment_slug: node-js
+
+    # Scaling
+    instance_count: 1
+    instance_size_slug: apps-s-1vcpu-0.5gb   # cheapest tier; upgrade as needed
+
+    # DigitalOcean injects PORT automatically; Express already reads process.env.PORT
+    http_port: 8080
+
+    # Environment variables
+    envs:
+      - key: NODE_ENV
+        value: "production"
+        scope: RUN_TIME
+
+      - key: JWT_SECRET
+        value: ""          # ← Set this in the dashboard (mark as SECRET)
+        scope: RUN_TIME
+        type: SECRET
+
+      # DATABASE_URL is automatically injected from the managed DB below.
+      # If you prefer to reference it manually, uncomment the next 3 lines:
+      # - key: DATABASE_URL
+      #   value: "${edupay-db.DATABASE_URL}"
+      #   scope: RUN_TIME
+
+    # Health check — App Platform will restart the dyno if this fails
+    health_check:
+      http_path: /
+
+# ── Managed PostgreSQL Database ──────────────────────────────────────────────
+databases:
+  - name: edupay-db
+    engine: PG
+    version: "16"
+    size: db-s-dev-database   # free dev database; upgrade to db-s-1vcpu-1gb for production
+    num_nodes: 1
+    # DATABASE_URL is automatically bound to the "web" service above
