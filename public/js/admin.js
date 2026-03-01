@@ -383,10 +383,17 @@ async function loadTeachers() {
 function renderTeachersTable() {
     const tbody = document.getElementById('teachersTableBody');
     if (!allTeachers.length) {
-        tbody.innerHTML = '<tr><td colspan="7" class="text-center" style="padding:32px;color:var(--text-light);">No teachers found</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" class="text-center" style="padding:32px;color:var(--text-light);">No teachers found</td></tr>';
         return;
     }
-    tbody.innerHTML = allTeachers.map(t => `
+    tbody.innerHTML = allTeachers.map(t => {
+        let paymentInfo = '-';
+        if (t.payment_method === 'mobile_money') {
+            paymentInfo = `<span class="badge badge-info">📱 Mobile Money</span><br><small>${t.mobile_money_provider || ''}: ${t.mobile_money_number || ''}</small>`;
+        } else if (t.payment_method === 'bank' || t.bank_name || t.bank_account_number) {
+            paymentInfo = `<span class="badge badge-success">🏦 Bank</span><br><small>${t.bank_name || ''}: ${t.bank_account_number || ''}</small>`;
+        }
+        return `
     <tr>
       <td><strong>${t.employee_id}</strong></td>
       <td>${t.full_name}</td>
@@ -394,6 +401,7 @@ function renderTeachersTable() {
       <td><span class="badge badge-info">${t.salary_scale}</span></td>
       <td>${t.phone || '-'}</td>
       <td>${t.email || '-'}</td>
+      <td>${paymentInfo}</td>
       <td>
         <div class="action-btns">
           <button class="btn btn-sm btn-secondary" onclick="editTeacher(${t.id})">Edit</button>
@@ -401,7 +409,19 @@ function renderTeachersTable() {
         </div>
       </td>
     </tr>
+  `;
+    }).join('');
+}
+        </div>
+      </td>
+    </tr>
   `).join('');
+}
+
+function toggleTeacherPaymentFields() {
+    const method = document.getElementById('teacherPaymentMethod').value;
+    document.getElementById('teacherBankFields').style.display = method === 'bank' ? '' : 'none';
+    document.getElementById('teacherMobileFields').style.display = method === 'mobile_money' ? '' : 'none';
 }
 
 async function showCreateTeacherModal() {
@@ -412,6 +432,12 @@ async function showCreateTeacherModal() {
     usernameInput.disabled = false;
     usernameInput.placeholder = 'Leave blank to auto-generate';
     document.getElementById('teacherUsernameHint').textContent = '';
+    document.getElementById('teacherPaymentMethod').value = 'bank';
+    document.getElementById('teacherBankName').value = '';
+    document.getElementById('teacherBankAccountNumber').value = '';
+    document.getElementById('teacherMobileProvider').value = 'MTN Mobile Money';
+    document.getElementById('teacherMobileNumber').value = '';
+    toggleTeacherPaymentFields();
     await loadSalaryScalesDropdown();
     openModal('teacherModal');
 }
@@ -428,6 +454,14 @@ async function editTeacher(id) {
     document.getElementById('teacherEmail').value = teacher.email || '';
     document.getElementById('teacherPhone').value = teacher.phone || '';
     document.getElementById('teacherDateJoined').value = teacher.date_joined || '';
+    // Payment method
+    const pm = teacher.payment_method || 'bank';
+    document.getElementById('teacherPaymentMethod').value = pm;
+    document.getElementById('teacherBankName').value = teacher.bank_name || '';
+    document.getElementById('teacherBankAccountNumber').value = teacher.bank_account_number || '';
+    document.getElementById('teacherMobileProvider').value = teacher.mobile_money_provider || 'MTN Mobile Money';
+    document.getElementById('teacherMobileNumber').value = teacher.mobile_money_number || '';
+    toggleTeacherPaymentFields();
     const usernameInput = document.getElementById('teacherUsername');
     usernameInput.value = teacher.username || '';
     usernameInput.disabled = true;
@@ -438,6 +472,7 @@ async function editTeacher(id) {
 async function saveTeacher() {
     const editId = document.getElementById('editTeacherId').value;
     const usernameVal = document.getElementById('teacherUsername').value.trim();
+    const pm = document.getElementById('teacherPaymentMethod').value;
     const data = {
         full_name: document.getElementById('teacherFullName').value,
         position: document.getElementById('teacherPosition').value,
@@ -445,7 +480,23 @@ async function saveTeacher() {
         email: document.getElementById('teacherEmail').value,
         phone: document.getElementById('teacherPhone').value,
         date_joined: document.getElementById('teacherDateJoined').value,
+        payment_method: pm,
     };
+    if (pm === 'bank') {
+        data.bank_name = document.getElementById('teacherBankName').value.trim();
+        data.bank_account_number = document.getElementById('teacherBankAccountNumber').value.trim();
+        if (!data.bank_name || !data.bank_account_number) {
+            showToast('Bank name and account number are required for bank payments', 'error');
+            return;
+        }
+    } else {
+        data.mobile_money_provider = document.getElementById('teacherMobileProvider').value;
+        data.mobile_money_number = document.getElementById('teacherMobileNumber').value.trim();
+        if (!data.mobile_money_number) {
+            showToast('Mobile money number is required', 'error');
+            return;
+        }
+    }
     if (!editId && usernameVal) data.username = usernameVal;
 
     if (!data.full_name || !data.salary_scale) {

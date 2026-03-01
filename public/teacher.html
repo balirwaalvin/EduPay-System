@@ -106,10 +106,69 @@
                                         <label>Phone</label>
                                         <input type="text" id="editPhone" class="form-control">
                                     </div>
+                                    <div class="form-group" style="grid-column:1/-1;">
+                                        <label>Payment Method</label>
+                                        <select id="editPaymentMethod" class="form-control" onchange="toggleProfilePaymentFields()">
+                                            <option value="bank">Bank Account</option>
+                                            <option value="mobile_money">Mobile Money Wallet</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <!-- Bank fields -->
+                                <div id="editBankFields" class="form-grid" style="margin-top:8px;">
+                                    <div class="form-group">
+                                        <label>Bank Name</label>
+                                        <input type="text" id="editBankName" class="form-control" placeholder="e.g. Stanbic Bank">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Account Number</label>
+                                        <input type="text" id="editBankAccountNumber" class="form-control" placeholder="e.g. 9030012345678">
+                                    </div>
+                                </div>
+                                <!-- Mobile Money fields -->
+                                <div id="editMobileFields" class="form-grid" style="margin-top:8px;display:none;">
+                                    <div class="form-group">
+                                        <label>Mobile Money Provider</label>
+                                        <select id="editMobileProvider" class="form-control">
+                                            <option value="MTN Mobile Money">MTN Mobile Money</option>
+                                            <option value="Airtel Money">Airtel Money</option>
+                                            <option value="Africell Money">Africell Money</option>
+                                            <option value="Other">Other</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Mobile Money Number</label>
+                                        <input type="text" id="editMobileNumber" class="form-control" placeholder="e.g. 0771234567">
+                                    </div>
                                 </div>
                                 <div style="margin-top:12px; display:flex; gap:8px;">
                                     <button class="btn btn-primary" onclick="saveProfile()">Save Changes</button>
                                     <button class="btn btn-secondary" onclick="toggleEditProfile()">Cancel</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Payment Details Card -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Payment Details</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="profile-card">
+                                <div class="profile-field"><label>Payment Method</label>
+                                    <div class="value" id="profPaymentMethod">-</div>
+                                </div>
+                                <div class="profile-field" id="profBankNameField"><label>Bank Name</label>
+                                    <div class="value" id="profBankName">-</div>
+                                </div>
+                                <div class="profile-field" id="profBankAccField"><label>Account Number</label>
+                                    <div class="value" id="profBankAccountNumber">-</div>
+                                </div>
+                                <div class="profile-field" id="profMobileProviderField"><label>Mobile Money Provider</label>
+                                    <div class="value" id="profMobileProvider">-</div>
+                                </div>
+                                <div class="profile-field" id="profMobileNumField"><label>Mobile Number</label>
+                                    <div class="value" id="profMobileNumber">-</div>
                                 </div>
                             </div>
                         </div>

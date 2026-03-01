@@ -237,6 +237,7 @@
                                             <th>Salary Scale</th>
                                             <th>Phone</th>
                                             <th>Email</th>
+                                            <th>Payment Details</th>
                                             <th>Actions</th>
                                         </tr>
                                     </thead>
@@ -583,6 +584,40 @@
                         <div class="form-group">
                             <label>Date Joined</label>
                             <input type="date" id="teacherDateJoined" class="form-control">
+                        </div>
+                        <div class="form-group" style="grid-column:1/-1;">
+                            <label>Payment Method *</label>
+                            <select id="teacherPaymentMethod" class="form-control" onchange="toggleTeacherPaymentFields()">
+                                <option value="bank">Bank Account</option>
+                                <option value="mobile_money">Mobile Money Wallet</option>
+                            </select>
+                        </div>
+                    </div>
+                    <!-- Bank Account Fields -->
+                    <div id="teacherBankFields" class="form-grid" style="margin-top:8px;">
+                        <div class="form-group">
+                            <label>Bank Name *</label>
+                            <input type="text" id="teacherBankName" class="form-control" placeholder="e.g. Stanbic Bank">
+                        </div>
+                        <div class="form-group">
+                            <label>Account Number *</label>
+                            <input type="text" id="teacherBankAccountNumber" class="form-control" placeholder="e.g. 9030012345678">
+                        </div>
+                    </div>
+                    <!-- Mobile Money Fields -->
+                    <div id="teacherMobileFields" class="form-grid" style="margin-top:8px;display:none;">
+                        <div class="form-group">
+                            <label>Mobile Money Provider *</label>
+                            <select id="teacherMobileProvider" class="form-control">
+                                <option value="MTN Mobile Money">MTN Mobile Money</option>
+                                <option value="Airtel Money">Airtel Money</option>
+                                <option value="Africell Money">Africell Money</option>
+                                <option value="Other">Other</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Mobile Money Number *</label>
+                            <input type="text" id="teacherMobileNumber" class="form-control" placeholder="e.g. 0771234567">
                         </div>
                     </div>
                 </form>

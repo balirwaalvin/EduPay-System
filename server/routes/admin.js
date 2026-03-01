@@ -126,7 +126,11 @@ router.get('/teachers', async (req, res) => {
 
 router.post('/teachers', async (req, res) => {
     try {
-        const { full_name, email, phone, position, salary_scale, date_joined, username: requestedUsername } = req.body;
+        const {
+            full_name, email, phone, position, salary_scale, date_joined,
+            username: requestedUsername,
+            payment_method, bank_name, bank_account_number, mobile_money_provider, mobile_money_number
+        } = req.body;
         if (!full_name || !salary_scale)
             return res.status(400).json({ error: 'Full name and salary scale are required.' });
         const db = getDb();
@@ -145,11 +149,19 @@ router.post('/teachers', async (req, res) => {
             [uniqueUsername, defaultPassword, full_name, email || '', phone || '']
         );
         const empId = 'TCH' + String(newUser.id).padStart(4, '0');
+        const pm = payment_method || 'bank';
         await db.query(
-            `INSERT INTO teachers (user_id, employee_id, full_name, email, phone, position, salary_scale, date_joined)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+            `INSERT INTO teachers
+                (user_id, employee_id, full_name, email, phone, position, salary_scale, date_joined,
+                 payment_method, bank_name, bank_account_number, mobile_money_provider, mobile_money_number)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
             [newUser.id, empId, full_name, email || '', phone || '', position || '',
-             salary_scale, date_joined || new Date().toISOString().split('T')[0]]
+             salary_scale, date_joined || new Date().toISOString().split('T')[0],
+             pm,
+             pm === 'bank' ? (bank_name || '') : null,
+             pm === 'bank' ? (bank_account_number || '') : null,
+             pm === 'mobile_money' ? (mobile_money_provider || '') : null,
+             pm === 'mobile_money' ? (mobile_money_number || '') : null]
         );
         logAudit(db, req.user.id, req.user.username, 'CREATE_TEACHER', `Added teacher: ${full_name} (${empId})`, req.ip);
         res.status(201).json({
@@ -164,14 +176,29 @@ router.post('/teachers', async (req, res) => {
 
 router.put('/teachers/:id', async (req, res) => {
     try {
-        const { full_name, email, phone, position, salary_scale } = req.body;
+        const {
+            full_name, email, phone, position, salary_scale,
+            payment_method, bank_name, bank_account_number, mobile_money_provider, mobile_money_number
+        } = req.body;
         const db = getDb();
+        const pm = payment_method || null;
         await db.query(
             `UPDATE teachers SET
-                full_name=COALESCE($1,full_name), email=COALESCE($2,email), phone=COALESCE($3,phone),
-                position=COALESCE($4,position), salary_scale=COALESCE($5,salary_scale), updated_at=NOW()
-             WHERE id=$6`,
-            [full_name || null, email || null, phone || null, position || null, salary_scale || null, req.params.id]
+                full_name=COALESCE($1,full_name),
+                email=COALESCE($2,email),
+                phone=COALESCE($3,phone),
+                position=COALESCE($4,position),
+                salary_scale=COALESCE($5,salary_scale),
+                payment_method=COALESCE($6,payment_method),
+                bank_name=CASE WHEN $6='bank' THEN $7 WHEN $6='mobile_money' THEN NULL ELSE bank_name END,
+                bank_account_number=CASE WHEN $6='bank' THEN $8 WHEN $6='mobile_money' THEN NULL ELSE bank_account_number END,
+                mobile_money_provider=CASE WHEN $6='mobile_money' THEN $9 WHEN $6='bank' THEN NULL ELSE mobile_money_provider END,
+                mobile_money_number=CASE WHEN $6='mobile_money' THEN $10 WHEN $6='bank' THEN NULL ELSE mobile_money_number END,
+                updated_at=NOW()
+             WHERE id=$11`,
+            [full_name || null, email || null, phone || null, position || null, salary_scale || null,
+             pm, bank_name || null, bank_account_number || null,
+             mobile_money_provider || null, mobile_money_number || null, req.params.id]
         );
         const { rows: [teacher] } = await db.query("SELECT user_id FROM teachers WHERE id = $1", [req.params.id]);
         if (teacher && teacher.user_id) {

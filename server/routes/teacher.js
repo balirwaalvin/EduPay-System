@@ -26,11 +26,28 @@ router.get('/profile', async (req, res) => {
 // PUT /api/teacher/profile
 router.put('/profile', async (req, res) => {
     try {
-        const { phone, email } = req.body;
+        const {
+            phone, email,
+            payment_method, bank_name, bank_account_number,
+            mobile_money_provider, mobile_money_number
+        } = req.body;
         const db = getDb();
+        const pm = payment_method || null;
         await db.query(
-            "UPDATE teachers SET phone=COALESCE($1,phone), email=COALESCE($2,email), updated_at=NOW() WHERE user_id=$3",
-            [phone || null, email || null, req.user.id]
+            `UPDATE teachers SET
+                phone=COALESCE($1,phone),
+                email=COALESCE($2,email),
+                payment_method=COALESCE($3,payment_method),
+                bank_name=CASE WHEN $3='bank' THEN $4 WHEN $3='mobile_money' THEN NULL ELSE bank_name END,
+                bank_account_number=CASE WHEN $3='bank' THEN $5 WHEN $3='mobile_money' THEN NULL ELSE bank_account_number END,
+                mobile_money_provider=CASE WHEN $3='mobile_money' THEN $6 WHEN $3='bank' THEN NULL ELSE mobile_money_provider END,
+                mobile_money_number=CASE WHEN $3='mobile_money' THEN $7 WHEN $3='bank' THEN NULL ELSE mobile_money_number END,
+                updated_at=NOW()
+             WHERE user_id=$8`,
+            [phone || null, email || null, pm,
+             bank_name || null, bank_account_number || null,
+             mobile_money_provider || null, mobile_money_number || null,
+             req.user.id]
         );
         await db.query(
             "UPDATE users SET phone=COALESCE($1,phone), email=COALESCE($2,email), updated_at=NOW() WHERE id=$3",

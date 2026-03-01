@@ -85,10 +85,21 @@ async function createTables() {
       salary_scale TEXT NOT NULL DEFAULT 'Scale_1',
       date_joined TEXT,
       is_active INTEGER DEFAULT 1,
+      payment_method TEXT DEFAULT 'bank' CHECK(payment_method IN ('bank','mobile_money')),
+      bank_name TEXT,
+      bank_account_number TEXT,
+      mobile_money_provider TEXT,
+      mobile_money_number TEXT,
       created_at TIMESTAMP DEFAULT NOW(),
       updated_at TIMESTAMP DEFAULT NOW()
     )
   `);
+
+  // Add payment columns to existing teachers tables that predate this schema change
+  const teacherCols = ['payment_method', 'bank_name', 'bank_account_number', 'mobile_money_provider', 'mobile_money_number'];
+  for (const col of teacherCols) {
+    await pool.query(`ALTER TABLE teachers ADD COLUMN IF NOT EXISTS ${col} TEXT`).catch(() => {});
+  }
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS accountants (

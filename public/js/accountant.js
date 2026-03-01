@@ -30,7 +30,7 @@ async function loadTeacherRecords() {
         const teachers = await apiRequest('/accountant/teachers');
         const tbody = document.getElementById('teacherRecordsBody');
         if (!teachers.length) {
-            tbody.innerHTML = '<tr><td colspan="7" class="text-center" style="padding:32px;color:var(--text-light);">No teachers found</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="8" class="text-center" style="padding:32px;color:var(--text-light);">No teachers found</td></tr>';
             return;
         }
         tbody.innerHTML = teachers.map(t => {
@@ -55,6 +55,15 @@ async function loadTeacherRecords() {
                 <div class="breakdown-row"><span>NSSF</span><span>${t.nssf_percentage || 0}%</span></div>
               </div>`;
 
+            let paymentDetails = '-';
+            if (t.payment_method === 'mobile_money') {
+                paymentDetails = `<span class="badge badge-info">📱 Mobile Money</span><br><small>${t.mobile_money_provider || ''}</small><br><small>${t.mobile_money_number || ''}</small>`;
+            } else if (t.bank_name || t.bank_account_number) {
+                paymentDetails = `<span class="badge badge-success">🏦 Bank</span><br><small>${t.bank_name || ''}</small><br><small>${t.bank_account_number || ''}</small>`;
+            } else {
+                paymentDetails = `<span class="badge badge-gray">Not Set</span>`;
+            }
+
             return `
         <tr>
           <td><strong>${t.employee_id}</strong></td>
@@ -64,6 +73,7 @@ async function loadTeacherRecords() {
           <td>${formatCurrency(t.basic_salary)}</td>
           <td>${allowanceBreakdown}</td>
           <td>${deductionBreakdown}</td>
+          <td>${paymentDetails}</td>
         </tr>
       `;
         }).join('');

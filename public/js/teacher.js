@@ -29,9 +29,35 @@ async function loadProfile() {
         document.getElementById('profMedical').textContent = formatCurrency(profileData.medical_allowance);
         document.getElementById('profTax').textContent = `${profileData.tax_percentage || 0}%`;
         document.getElementById('profNSSF').textContent = `${profileData.nssf_percentage || 0}%`;
+
+        // Payment details
+        const pm = profileData.payment_method || 'bank';
+        if (pm === 'mobile_money') {
+            document.getElementById('profPaymentMethod').textContent = '📱 Mobile Money Wallet';
+            document.getElementById('profBankNameField').style.display = 'none';
+            document.getElementById('profBankAccField').style.display = 'none';
+            document.getElementById('profMobileProviderField').style.display = '';
+            document.getElementById('profMobileNumField').style.display = '';
+            document.getElementById('profMobileProvider').textContent = profileData.mobile_money_provider || 'Not set';
+            document.getElementById('profMobileNumber').textContent = profileData.mobile_money_number || 'Not set';
+        } else {
+            document.getElementById('profPaymentMethod').textContent = '🏦 Bank Account';
+            document.getElementById('profBankNameField').style.display = '';
+            document.getElementById('profBankAccField').style.display = '';
+            document.getElementById('profMobileProviderField').style.display = 'none';
+            document.getElementById('profMobileNumField').style.display = 'none';
+            document.getElementById('profBankName').textContent = profileData.bank_name || 'Not set';
+            document.getElementById('profBankAccountNumber').textContent = profileData.bank_account_number || 'Not set';
+        }
     } catch (err) {
         showToast('Failed to load profile', 'error');
     }
+}
+
+function toggleProfilePaymentFields() {
+    const method = document.getElementById('editPaymentMethod').value;
+    document.getElementById('editBankFields').style.display = method === 'bank' ? '' : 'none';
+    document.getElementById('editMobileFields').style.display = method === 'mobile_money' ? '' : 'none';
 }
 
 function toggleEditProfile() {
@@ -45,6 +71,14 @@ function toggleEditProfile() {
         btn.style.display = 'none';
         document.getElementById('editEmail').value = profileData?.email || '';
         document.getElementById('editPhone').value = profileData?.phone || '';
+        // Populate payment method fields
+        const pm = profileData?.payment_method || 'bank';
+        document.getElementById('editPaymentMethod').value = pm;
+        document.getElementById('editBankName').value = profileData?.bank_name || '';
+        document.getElementById('editBankAccountNumber').value = profileData?.bank_account_number || '';
+        document.getElementById('editMobileProvider').value = profileData?.mobile_money_provider || 'MTN Mobile Money';
+        document.getElementById('editMobileNumber').value = profileData?.mobile_money_number || '';
+        toggleProfilePaymentFields();
     } else {
         editEl.style.display = 'none';
         viewEl.style.display = 'grid';
@@ -55,10 +89,19 @@ function toggleEditProfile() {
 async function saveProfile() {
     const email = document.getElementById('editEmail').value;
     const phone = document.getElementById('editPhone').value;
+    const pm = document.getElementById('editPaymentMethod').value;
+    const body = { email, phone, payment_method: pm };
+    if (pm === 'bank') {
+        body.bank_name = document.getElementById('editBankName').value.trim();
+        body.bank_account_number = document.getElementById('editBankAccountNumber').value.trim();
+    } else {
+        body.mobile_money_provider = document.getElementById('editMobileProvider').value;
+        body.mobile_money_number = document.getElementById('editMobileNumber').value.trim();
+    }
     try {
         await apiRequest('/teacher/profile', {
             method: 'PUT',
-            body: { email, phone }
+            body
         });
         showToast('Profile updated');
         toggleEditProfile();
