@@ -5,6 +5,12 @@ const bcrypt = require('bcryptjs');
 // DigitalOcean App Platform injects DATABASE_URL; fall back to individual PG* vars.
 // We strip sslmode from the URL and pass ssl as an object so pg doesn't conflict.
 function buildPoolConfig() {
+  // Startup diagnostic — logs which DB-related env vars are present (no values)
+  const dbVars = Object.keys(process.env).filter(k =>
+    /^(DATABASE|PG|POSTGRES)/i.test(k)
+  );
+  console.log('[DB] Database-related env vars present:', dbVars.length ? dbVars : '(none)');
+
   const raw = process.env.DATABASE_URL;
 
   if (raw && raw.startsWith('postgres')) {
@@ -19,13 +25,13 @@ function buildPoolConfig() {
   }
 
   // Fall back to individual connection variables (also injected by DO App Platform)
-  if (process.env.PGHOST || process.env.DATABASE_HOST) {
+  if (process.env.PGHOST || process.env.DATABASE_HOST || process.env.host) {
     const config = {
-      host:     process.env.PGHOST     || process.env.DATABASE_HOST,
-      port:     process.env.PGPORT     || process.env.DATABASE_PORT     || 25060,
-      database: process.env.PGDATABASE || process.env.DATABASE_NAME,
-      user:     process.env.PGUSER     || process.env.DATABASE_USERNAME,
-      password: process.env.PGPASSWORD || process.env.DATABASE_PASSWORD,
+      host:     process.env.PGHOST     || process.env.DATABASE_HOST     || process.env.host,
+      port:     process.env.PGPORT     || process.env.DATABASE_PORT     || process.env.port     || 25060,
+      database: process.env.PGDATABASE || process.env.DATABASE_NAME     || process.env.database || 'defaultdb',
+      user:     process.env.PGUSER     || process.env.DATABASE_USERNAME || process.env.username || process.env.user,
+      password: process.env.PGPASSWORD || process.env.DATABASE_PASSWORD || process.env.password,
       ssl: { rejectUnauthorized: false }
     };
     console.log('[DB] Using individual connection vars, host:', config.host);
