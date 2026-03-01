@@ -35,15 +35,13 @@ services:
         scope: RUN_TIME
 
       - key: JWT_SECRET
-        # ← Set the actual value in the App Platform dashboard under Environment Variables
+        # Set this value in the App Platform dashboard → Environment Variables
         scope: RUN_TIME
         type: SECRET
 
-      # Bind DATABASE_URL from the managed DB component named "db" (no hyphens).
-      # Component names with hyphens break DO's ${} interpolation.
-      - key: DATABASE_URL
-        value: "${db.DATABASE_URL}"
-        scope: RUN_TIME
+      # DATABASE_URL must be set manually in the dashboard:
+      # App → Settings → Environment Variables → add DATABASE_URL
+      # Get the value from: Databases → edupay-db → Connection Details → URI
 
     # Health check
     health_check:
@@ -51,9 +49,8 @@ services:
 
 # ── Managed PostgreSQL Database ──────────────────────────────────────────────
 databases:
-  - name: db
+  - name: edupay-db
     engine: PG
     version: "16"
-    # Use db-s-1vcpu-1gb for production; dev database has known networking limits
-    size: db-s-1vcpu-1gb
+    size: db-s-1vcpu-1gb   # dedicated instance — resolves to a real hostname (not 'base')
     num_nodes: 1
