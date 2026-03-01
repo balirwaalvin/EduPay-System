@@ -39,20 +39,21 @@ services:
         scope: RUN_TIME
         type: SECRET
 
-      # Explicitly bind DATABASE_URL from the managed database component below.
-      # App Platform resolves ${edupay-db.DATABASE_URL} at deploy time.
+      # Bind DATABASE_URL from the managed DB component named "db" (no hyphens).
+      # Component names with hyphens break DO's ${} interpolation.
       - key: DATABASE_URL
-        value: "${edupay-db.DATABASE_URL}"
+        value: "${db.DATABASE_URL}"
         scope: RUN_TIME
 
-    # Health check — App Platform will restart the dyno if this fails
+    # Health check
     health_check:
       http_path: /
 
 # ── Managed PostgreSQL Database ──────────────────────────────────────────────
 databases:
-  - name: edupay-db
+  - name: db
     engine: PG
     version: "16"
-    size: db-s-dev-database   # free dev database; upgrade to db-s-1vcpu-1gb for production
+    # Use db-s-1vcpu-1gb for production; dev database has known networking limits
+    size: db-s-1vcpu-1gb
     num_nodes: 1

@@ -2,14 +2,44 @@ require('dotenv').config();
 const { Pool } = require('pg');
 const bcrypt = require('bcryptjs');
 
-// Strip sslmode from the URL so pg doesn't override our ssl config object
-const connectionString = (process.env.DATABASE_URL || '').replace(/[?&]sslmode=[^&]*/g, '').replace(/\?$/, '');
-const useSSL = (process.env.DATABASE_URL || '').includes('sslmode=');
+// DigitalOcean App Platform injects DATABASE_URL; fall back to individual PG* vars.
+// We strip sslmode from the URL and pass ssl as an object so pg doesn't conflict.
+function buildPoolConfig() {
+  const raw = process.env.DATABASE_URL;
 
-const pool = new Pool({
-  connectionString: connectionString || process.env.DATABASE_URL,
-  ssl: useSSL ? { rejectUnauthorized: false } : false
-});
+  if (raw && raw.startsWith('postgres')) {
+    // Remove sslmode from the query string so pg won't have a conflicting option
+    const connectionString = raw.replace(/[?&]sslmode=[^&]*/g, '').replace(/\?$/, '');
+    const useSSL = raw.includes('sslmode=');
+    console.log('[DB] Using DATABASE_URL, ssl:', useSSL);
+    return {
+      connectionString,
+      ssl: useSSL ? { rejectUnauthorized: false } : false
+    };
+  }
+
+  // Fall back to individual connection variables (also injected by DO App Platform)
+  if (process.env.PGHOST || process.env.DATABASE_HOST) {
+    const config = {
+      host:     process.env.PGHOST     || process.env.DATABASE_HOST,
+      port:     process.env.PGPORT     || process.env.DATABASE_PORT     || 25060,
+      database: process.env.PGDATABASE || process.env.DATABASE_NAME,
+      user:     process.env.PGUSER     || process.env.DATABASE_USERNAME,
+      password: process.env.PGPASSWORD || process.env.DATABASE_PASSWORD,
+      ssl: { rejectUnauthorized: false }
+    };
+    console.log('[DB] Using individual connection vars, host:', config.host);
+    return config;
+  }
+
+  // Nothing configured — crash with a clear message
+  throw new Error(
+    'No database configuration found.\n' +
+    'Set DATABASE_URL (or PGHOST/PGPORT/PGDATABASE/PGUSER/PGPASSWORD) in your environment.'
+  );
+}
+
+const pool = new Pool(buildPoolConfig());
 
 async function initDatabase() {
   await createTables();
