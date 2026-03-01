@@ -412,11 +412,6 @@ function renderTeachersTable() {
   `;
     }).join('');
 }
-        </div>
-      </td>
-    </tr>
-  `).join('');
-}
 
 function toggleTeacherPaymentFields() {
     const method = document.getElementById('teacherPaymentMethod').value;
