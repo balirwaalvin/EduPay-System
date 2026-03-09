@@ -297,11 +297,11 @@ async function loadLeaveRequests() {
 
 function openLeaveModal() {
     document.getElementById('leaveForm').reset();
-    document.getElementById('leaveModal').style.display = 'flex';
+    openModal('leaveModal');
 }
 
 function closeLeaveModal() {
-    document.getElementById('leaveModal').style.display = 'none';
+    closeModal('leaveModal');
 }
 
 async function submitLeaveRequest(e) {

@@ -336,11 +336,11 @@
     </div>
 
     <!-- Leave Request Modal -->
-    <div id="leaveModal" class="modal">
-        <div class="modal-content" style="max-width: 500px;">
+    <div id="leaveModal" class="modal-overlay">
+        <div class="modal" style="max-width: 500px;">
             <div class="modal-header">
                 <h2>New Leave Request</h2>
-                <span class="close" onclick="closeLeaveModal()">&times;</span>
+                <button class="modal-close" onclick="closeLeaveModal()">✕</button>
             </div>
             <div class="modal-body">
                 <form id="leaveForm" onsubmit="submitLeaveRequest(event)">
@@ -370,7 +370,7 @@
                         <label>Reason</label>
                         <textarea id="leaveReason" class="form-control" rows="3" required></textarea>
                     </div>
-                    <div class="form-actions mt-4">
+                    <div class="modal-footer" style="margin-top:20px; padding:0;">
                         <button type="button" class="btn btn-secondary" onclick="closeLeaveModal()">Cancel</button>
                         <button type="submit" class="btn btn-primary">Submit Request</button>
                     </div>
