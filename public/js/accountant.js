@@ -30,14 +30,14 @@ async function loadTeacherRecords() {
         const teachers = await apiRequest('/accountant/teachers');
         const tbody = document.getElementById('teacherRecordsBody');
         if (!teachers.length) {
-            tbody.innerHTML = '<tr><td colspan="8" class="text-center" style="padding:32px;color:var(--text-light);">No teachers found</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="3" class="text-center" style="padding:32px;color:var(--text-light);">No teachers found</td></tr>';
             return;
         }
         tbody.innerHTML = teachers.map(t => {
-            const housing   = parseFloat(t.housing_allowance)   || 0;
+            const housing = parseFloat(t.housing_allowance) || 0;
             const transport = parseFloat(t.transport_allowance) || 0;
-            const medical   = parseFloat(t.medical_allowance)   || 0;
-            const other     = parseFloat(t.other_allowance)     || 0;
+            const medical = parseFloat(t.medical_allowance) || 0;
+            const other = parseFloat(t.other_allowance) || 0;
             const totalAllowances = housing + transport + medical + other;
 
             const allowanceBreakdown = `
@@ -65,20 +65,50 @@ async function loadTeacherRecords() {
             }
 
             return `
-        <tr>
+        <tr class="teacher-row">
           <td><strong>${t.employee_id}</strong></td>
-          <td>${t.full_name}</td>
-          <td>${t.position || '-'}</td>
-          <td><span class="badge badge-info">${t.salary_scale}</span></td>
-          <td>${formatCurrency(t.basic_salary)}</td>
-          <td>${allowanceBreakdown}</td>
-          <td>${deductionBreakdown}</td>
-          <td>${paymentDetails}</td>
+          <td>
+            <a href="#" style="color:var(--text-primary);text-decoration:none;font-weight:600;display:flex;align-items:center;gap:8px" onclick="event.preventDefault(); toggleTeacherDetails('${t.employee_id}')">
+                <div class="user-avatar" style="width:28px;height:28px;font-size:0.75rem">${t.full_name.charAt(0)}</div>
+                ${t.full_name}
+            </a>
+          </td>
+          <td><button class="btn btn-sm btn-secondary" onclick="toggleTeacherDetails('${t.employee_id}')">👁️ View Details</button></td>
+        </tr>
+        <tr id="details-${t.employee_id}" class="teacher-details-row" style="display: none; background: var(--gray-50);">
+          <td colspan="3" style="padding: 0;">
+            <div style="padding: 24px; border-bottom: 2px solid var(--gray-200);">
+              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 24px;">
+                <div style="background: var(--white); padding: 16px; border-radius: var(--radius); border: 1px solid var(--gray-200);">
+                  <h4 style="margin-bottom:12px; color:var(--primary); font-size: 0.95rem;">General Information</h4>
+                  <p style="margin-bottom:8px"><strong>Position:</strong> ${t.position || '-'}</p>
+                  <p style="margin-bottom:8px"><strong>Scale:</strong> <span class="badge badge-info">${t.salary_scale}</span></p>
+                  <p style="margin-bottom:8px"><strong>Basic Salary:</strong> ${formatCurrency(t.basic_salary)}</p>
+                  <p style="margin-bottom:8px"><strong>Payment:</strong> <br><div style="margin-top:6px">${paymentDetails}</div></p>
+                </div>
+                <div style="background: var(--white); padding: 16px; border-radius: var(--radius); border: 1px solid var(--gray-200);">
+                  <h4 style="margin-bottom:12px; color:var(--primary); font-size: 0.95rem;">Allowances</h4>
+                  ${allowanceBreakdown}
+                </div>
+                <div style="background: var(--white); padding: 16px; border-radius: var(--radius); border: 1px solid var(--gray-200);">
+                  <h4 style="margin-bottom:12px; color:var(--primary); font-size: 0.95rem;">Deductions</h4>
+                  ${deductionBreakdown}
+                </div>
+              </div>
+            </div>
+          </td>
         </tr>
       `;
         }).join('');
     } catch (err) { showToast('Failed to load teachers', 'error'); }
 }
+
+window.toggleTeacherDetails = function (empId) {
+    const detailsRow = document.getElementById(`details-${empId}`);
+    if (detailsRow) {
+        detailsRow.style.display = detailsRow.style.display === 'none' ? 'table-row' : 'none';
+    }
+};
 
 // ============ PAYROLL ============
 let allPayrolls = [];
