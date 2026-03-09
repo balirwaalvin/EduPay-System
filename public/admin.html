@@ -38,6 +38,9 @@
                     <div class="nav-item" data-section="accountants" onclick="switchSection('accountants')">
                         <span class="nav-icon">🧾</span> Accountant Management
                     </div>
+                    <div class="nav-item" data-section="leave" onclick="switchSection('leave');loadLeaveRequests();">
+                        <span class="nav-icon">📅</span> Leave Requests
+                    </div>
                     <div class="nav-item" data-section="salary" onclick="switchSection('salary')">
                         <span class="nav-icon">💰</span> Salary Structure
                     </div>
@@ -244,6 +247,32 @@
                                         </tr>
                                     </thead>
                                     <tbody id="teachersTableBody"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Leave Requests -->
+                <div id="leave" class="page-section">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Leave Requests Management</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>Teacher</th>
+                                            <th>Type</th>
+                                            <th>Date Range</th>
+                                            <th>Reason</th>
+                                            <th>Status</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="leaveTableBody"></tbody>
                                 </table>
                             </div>
                         </div>

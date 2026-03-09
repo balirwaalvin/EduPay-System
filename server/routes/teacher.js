@@ -234,4 +234,44 @@ router.put('/notifications/read-all', async (req, res) => {
     } catch (err) { res.status(500).json({ error: 'Failed to update notifications.' }); }
 });
 
+// ============ LEAVE REQUESTS ============
+
+// GET /api/teacher/leave
+router.get('/leave', async (req, res) => {
+    try {
+        const db = getDb();
+        const { rows: [teacher] } = await db.query("SELECT id FROM teachers WHERE user_id = $1", [req.user.id]);
+        if (!teacher) return res.status(404).json({ error: 'Teacher not found.' });
+
+        const { rows } = await db.query(
+            "SELECT * FROM leave_requests WHERE teacher_id = $1 ORDER BY created_at DESC",
+            [teacher.id]
+        );
+        res.json(rows);
+    } catch (err) { res.status(500).json({ error: 'Failed to fetch leave requests.' }); }
+});
+
+// POST /api/teacher/leave
+router.post('/leave', async (req, res) => {
+    try {
+        const { leave_type, start_date, end_date, reason } = req.body;
+        if (!leave_type || !start_date || !end_date || !reason) {
+            return res.status(400).json({ error: 'All fields are required.' });
+        }
+
+        const db = getDb();
+        const { rows: [teacher] } = await db.query("SELECT id FROM teachers WHERE user_id = $1", [req.user.id]);
+        if (!teacher) return res.status(404).json({ error: 'Teacher not found.' });
+
+        const { rows: [newLeave] } = await db.query(
+            `INSERT INTO leave_requests (teacher_id, leave_type, start_date, end_date, reason)
+             VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+            [teacher.id, leave_type, start_date, end_date, reason]
+        );
+
+        logAudit(db, req.user.id, req.user.username, 'CREATE_LEAVE_REQUEST', `Submitted leave request for ${leave_type}`, req.ip);
+        res.json({ message: 'Leave request submitted successfully.', id: newLeave.id });
+    } catch (err) { res.status(500).json({ error: 'Failed to submit leave request.' }); }
+});
+
 module.exports = router;

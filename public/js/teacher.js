@@ -268,6 +268,65 @@ async function changePassword() {
     } catch (err) { showToast(err.message, 'error'); }
 }
 
+// ============ LEAVE REQUESTS ============
+async function loadLeaveRequests() {
+    try {
+        const leaves = await apiRequest('/teacher/leave');
+        const tbody = document.getElementById('leaveBody');
+        if (!leaves.length) {
+            tbody.innerHTML = '<tr><td colspan="5" class="text-center" style="padding:32px;color:var(--text-light);">No leave requests yet</td></tr>';
+            return;
+        }
+        tbody.innerHTML = leaves.map(l => {
+            let badgeClass = 'badge-warning';
+            if (l.status === 'Approved') badgeClass = 'badge-success';
+            if (l.status === 'Rejected') badgeClass = 'badge-danger';
+
+            return `
+            <tr>
+                <td><strong>${l.leave_type}</strong></td>
+                <td>${formatDate(l.start_date)}</td>
+                <td>${formatDate(l.end_date)}</td>
+                <td>${l.reason}</td>
+                <td><span class="badge ${badgeClass}">${l.status}</span></td>
+            </tr>
+            `;
+        }).join('');
+    } catch (err) { showToast('Failed to load leave requests', 'error'); }
+}
+
+function openLeaveModal() {
+    document.getElementById('leaveForm').reset();
+    document.getElementById('leaveModal').style.display = 'flex';
+}
+
+function closeLeaveModal() {
+    document.getElementById('leaveModal').style.display = 'none';
+}
+
+async function submitLeaveRequest(e) {
+    e.preventDefault();
+    const type = document.getElementById('leaveType').value;
+    const start = document.getElementById('leaveStartDate').value;
+    const end = document.getElementById('leaveEndDate').value;
+    const reason = document.getElementById('leaveReason').value.trim();
+
+    if (new Date(start) > new Date(end)) {
+        showToast('End date cannot be before start date', 'error');
+        return;
+    }
+
+    try {
+        await apiRequest('/teacher/leave', {
+            method: 'POST',
+            body: { leave_type: type, start_date: start, end_date: end, reason }
+        });
+        showToast('Leave request submitted successfully');
+        closeLeaveModal();
+        loadLeaveRequests();
+    } catch (err) { showToast(err.message, 'error'); }
+}
+
 // Update page title
 const originalSwitchSection = switchSection;
 switchSection = function (sectionId) {
@@ -276,6 +335,7 @@ switchSection = function (sectionId) {
         profile: 'My Profile',
         payslips: 'My Payslips',
         history: 'Salary History',
+        leave: 'My Leave Requests',
         notifications: 'Notifications',
         password: 'Change Password'
     };

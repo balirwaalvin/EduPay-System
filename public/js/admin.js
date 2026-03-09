@@ -635,6 +635,56 @@ async function deleteSalaryStructure(id) {
     } catch (err) { showToast(err.message, 'error'); }
 }
 
+// ============ LEAVE REQUESTS ============
+async function loadLeaveRequests() {
+    try {
+        const leaves = await apiRequest('/admin/leave');
+        const tbody = document.getElementById('leaveTableBody');
+        if (!leaves.length) {
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center" style="padding:32px;color:var(--text-light);">No leave requests found</td></tr>';
+            return;
+        }
+        tbody.innerHTML = leaves.map(l => {
+            let badgeClass = 'badge-warning';
+            if (l.status === 'Approved') badgeClass = 'badge-success';
+            if (l.status === 'Rejected') badgeClass = 'badge-danger';
+
+            let actions = '-';
+            if (l.status === 'Pending') {
+                actions = `
+                <div class="action-btns">
+                    <button class="btn btn-sm btn-success" onclick="updateLeaveStatus(${l.id}, 'Approved')">Approve</button>
+                    <button class="btn btn-sm btn-danger" onclick="updateLeaveStatus(${l.id}, 'Rejected')">Reject</button>
+                </div>
+                `;
+            }
+
+            return `
+            <tr>
+                <td><strong>${l.full_name}</strong><br><small style="color:var(--text-secondary);">${l.employee_id}</small></td>
+                <td><span class="badge badge-info">${l.leave_type}</span></td>
+                <td style="white-space:nowrap;">${formatDate(l.start_date)} - ${formatDate(l.end_date)}</td>
+                <td style="max-width:300px; white-space:normal;">${l.reason}</td>
+                <td><span class="badge ${badgeClass}">${l.status}</span></td>
+                <td>${actions}</td>
+            </tr>
+            `;
+        }).join('');
+    } catch (err) { showToast('Failed to load leave requests', 'error'); }
+}
+
+async function updateLeaveStatus(id, status) {
+    if (!confirm(`Are you sure you want to ${status.toLowerCase()} this leave request?`)) return;
+    try {
+        await apiRequest(`/admin/leave/${id}/status`, {
+            method: 'PUT',
+            body: { status }
+        });
+        showToast(`Leave request ${status.toLowerCase()} successfully`);
+        loadLeaveRequests();
+    } catch (err) { showToast(err.message, 'error'); }
+}
+
 // ============ CONFIGURATION ============
 async function loadConfig() {
     try {
@@ -740,6 +790,7 @@ switchSection = function (sectionId) {
         admins: 'Admin Management',
         teachers: 'Teacher Management',
         accountants: 'Accountant Management',
+        leave: 'Leave Requests Management',
         salary: 'Salary Structure',
         config: 'System Configuration',
         reports: 'Reports & Monitoring',

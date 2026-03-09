@@ -24,12 +24,15 @@
                     </div>
                 </div>
                 <div class="nav-section">
-                    <div class="nav-section-title">Salary</div>
+                    <div class="nav-section-title">Salary & Time</div>
                     <div class="nav-item" data-section="payslips" onclick="switchSection('payslips')">
                         <span class="nav-icon">📄</span> My Payslips
                     </div>
                     <div class="nav-item" data-section="history" onclick="switchSection('history')">
                         <span class="nav-icon">📊</span> Salary History
+                    </div>
+                    <div class="nav-item" data-section="leave" onclick="switchSection('leave');loadLeaveRequests();">
+                        <span class="nav-icon">📅</span> Leave Requests
                     </div>
                 </div>
                 <div class="nav-section">
@@ -267,6 +270,32 @@
                     </div>
                 </div>
 
+                <!-- Leave Requests -->
+                <div id="leave" class="page-section">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>My Leave Requests</h3>
+                            <button class="btn btn-primary" onclick="openLeaveModal()">+ New Request</button>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>Type</th>
+                                            <th>Start Date</th>
+                                            <th>End Date</th>
+                                            <th>Reason</th>
+                                            <th>Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="leaveBody"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Notifications -->
                 <div id="notifications" class="page-section">
                     <div class="card">
@@ -304,6 +333,50 @@
                 </div>
             </div>
         </main>
+    </div>
+
+    <!-- Leave Request Modal -->
+    <div id="leaveModal" class="modal">
+        <div class="modal-content" style="max-width: 500px;">
+            <div class="modal-header">
+                <h2>New Leave Request</h2>
+                <span class="close" onclick="closeLeaveModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <form id="leaveForm" onsubmit="submitLeaveRequest(event)">
+                    <div class="form-group">
+                        <label>Leave Type</label>
+                        <select id="leaveType" class="form-control" required>
+                            <option value="">Select Type...</option>
+                            <option value="Annual">Annual Leave</option>
+                            <option value="Sick">Sick Leave</option>
+                            <option value="Maternity">Maternity Leave</option>
+                            <option value="Paternity">Paternity Leave</option>
+                            <option value="Unpaid">Unpaid Leave</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </div>
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label>Start Date</label>
+                            <input type="date" id="leaveStartDate" class="form-control" required>
+                        </div>
+                        <div class="form-group">
+                            <label>End Date</label>
+                            <input type="date" id="leaveEndDate" class="form-control" required>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Reason</label>
+                        <textarea id="leaveReason" class="form-control" rows="3" required></textarea>
+                    </div>
+                    <div class="form-actions mt-4">
+                        <button type="button" class="btn btn-secondary" onclick="closeLeaveModal()">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Submit Request</button>
+                    </div>
+                </form>
+            </div>
+        </div>
     </div>
 
     <script src="/js/app.js"></script>

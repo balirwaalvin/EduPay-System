@@ -518,5 +518,38 @@ router.get('/stats', async (req, res) => {
     } catch (err) { res.status(500).json({ error: 'Failed to fetch stats.' }); }
 });
 
+// ============ LEAVE REQUESTS ============
+
+// GET /api/admin/leave
+router.get('/leave', async (req, res) => {
+    try {
+        const db = getDb();
+        const { rows } = await db.query(`
+            SELECT lr.*, t.full_name, t.employee_id
+            FROM leave_requests lr
+            JOIN teachers t ON lr.teacher_id = t.id
+            ORDER BY lr.created_at DESC
+        `);
+        res.json(rows);
+    } catch (err) { res.status(500).json({ error: 'Failed to fetch leave requests.' }); }
+});
+
+// PUT /api/admin/leave/:id/status
+router.put('/leave/:id/status', async (req, res) => {
+    try {
+        const { status } = req.body;
+        if (!['Approved', 'Rejected'].includes(status)) {
+            return res.status(400).json({ error: 'Invalid status.' });
+        }
+        const db = getDb();
+        const id = parseInt(req.params.id);
+
+        await db.query("UPDATE leave_requests SET status = $1, updated_at = NOW() WHERE id = $2", [status, id]);
+
+        logAudit(db, req.user.id, req.user.username, 'UPDATE_LEAVE_STATUS', `Updated leave request ID ${id} to ${status}`, req.ip);
+        res.json({ message: `Leave request ${status.toLowerCase()} successfully.` });
+    } catch (err) { res.status(500).json({ error: 'Failed to update leave request status.' }); }
+});
+
 module.exports = router;
 

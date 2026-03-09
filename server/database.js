@@ -205,6 +205,20 @@ async function createTables() {
       updated_at TIMESTAMP DEFAULT NOW()
     )
   `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS leave_requests (
+      id SERIAL PRIMARY KEY,
+      teacher_id INTEGER REFERENCES teachers(id) ON DELETE CASCADE,
+      leave_type TEXT NOT NULL,
+      start_date DATE NOT NULL,
+      end_date DATE NOT NULL,
+      reason TEXT,
+      status TEXT DEFAULT 'Pending' CHECK(status IN ('Pending','Approved','Rejected')),
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    )
+  `);
 }
 
 async function seedDefaults() {
