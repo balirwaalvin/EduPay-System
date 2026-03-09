@@ -27,10 +27,10 @@ function buildPoolConfig() {
   // Fall back to individual connection variables (also injected by DO App Platform)
   if (process.env.PGHOST || process.env.DATABASE_HOST || process.env.host) {
     const config = {
-      host:     process.env.PGHOST     || process.env.DATABASE_HOST     || process.env.host,
-      port:     process.env.PGPORT     || process.env.DATABASE_PORT     || process.env.port     || 25060,
-      database: process.env.PGDATABASE || process.env.DATABASE_NAME     || process.env.database || 'defaultdb',
-      user:     process.env.PGUSER     || process.env.DATABASE_USERNAME || process.env.username || process.env.user,
+      host: process.env.PGHOST || process.env.DATABASE_HOST || process.env.host,
+      port: process.env.PGPORT || process.env.DATABASE_PORT || process.env.port || 25060,
+      database: process.env.PGDATABASE || process.env.DATABASE_NAME || process.env.database || 'defaultdb',
+      user: process.env.PGUSER || process.env.DATABASE_USERNAME || process.env.username || process.env.user,
       password: process.env.PGPASSWORD || process.env.DATABASE_PASSWORD || process.env.password,
       ssl: { rejectUnauthorized: false }
     };
@@ -87,6 +87,7 @@ async function createTables() {
       is_active INTEGER DEFAULT 1,
       payment_method TEXT DEFAULT 'bank' CHECK(payment_method IN ('bank','mobile_money')),
       bank_name TEXT,
+      bank_account_name TEXT,
       bank_account_number TEXT,
       mobile_money_provider TEXT,
       mobile_money_number TEXT,
@@ -96,9 +97,9 @@ async function createTables() {
   `);
 
   // Add payment columns to existing teachers tables that predate this schema change
-  const teacherCols = ['payment_method', 'bank_name', 'bank_account_number', 'mobile_money_provider', 'mobile_money_number'];
+  const teacherCols = ['payment_method', 'bank_name', 'bank_account_name', 'bank_account_number', 'mobile_money_provider', 'mobile_money_number'];
   for (const col of teacherCols) {
-    await pool.query(`ALTER TABLE teachers ADD COLUMN IF NOT EXISTS ${col} TEXT`).catch(() => {});
+    await pool.query(`ALTER TABLE teachers ADD COLUMN IF NOT EXISTS ${col} TEXT`).catch(() => { });
   }
 
   await pool.query(`
@@ -222,9 +223,9 @@ async function seedDefaults() {
   const { rows: scaleRows } = await pool.query("SELECT id FROM salary_structures LIMIT 1");
   if (!scaleRows.length) {
     const scales = [
-      ['Scale_1', 800000,  100000, 50000,  30000,  10],
-      ['Scale_2', 1200000, 150000, 80000,  50000,  15],
-      ['Scale_3', 1800000, 200000, 100000, 80000,  20],
+      ['Scale_1', 800000, 100000, 50000, 30000, 10],
+      ['Scale_2', 1200000, 150000, 80000, 50000, 15],
+      ['Scale_3', 1800000, 200000, 100000, 80000, 20],
       ['Scale_4', 2500000, 300000, 150000, 100000, 25],
       ['Scale_5', 3500000, 400000, 200000, 150000, 30],
     ];
@@ -242,10 +243,10 @@ async function seedDefaults() {
   if (!configRows.length) {
     const configs = [
       ['payroll_period', 'monthly'],
-      ['currency',       'UGX'],
-      ['school_name',    'EduPay School'],
-      ['tax_enabled',    'true'],
-      ['nssf_percentage','5'],
+      ['currency', 'UGX'],
+      ['school_name', 'EduPay School'],
+      ['tax_enabled', 'true'],
+      ['nssf_percentage', '5'],
     ];
     for (const [k, v] of configs) {
       await pool.query("INSERT INTO system_config (config_key, config_value) VALUES ($1, $2)", [k, v]);

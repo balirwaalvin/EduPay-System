@@ -28,7 +28,7 @@ router.put('/profile', async (req, res) => {
     try {
         const {
             phone, email,
-            payment_method, bank_name, bank_account_number,
+            payment_method, bank_name, bank_account_name, bank_account_number,
             mobile_money_provider, mobile_money_number
         } = req.body;
         const db = getDb();
@@ -39,15 +39,16 @@ router.put('/profile', async (req, res) => {
                 email=COALESCE($2,email),
                 payment_method=COALESCE($3,payment_method),
                 bank_name=CASE WHEN $3='bank' THEN $4 WHEN $3='mobile_money' THEN NULL ELSE bank_name END,
-                bank_account_number=CASE WHEN $3='bank' THEN $5 WHEN $3='mobile_money' THEN NULL ELSE bank_account_number END,
-                mobile_money_provider=CASE WHEN $3='mobile_money' THEN $6 WHEN $3='bank' THEN NULL ELSE mobile_money_provider END,
-                mobile_money_number=CASE WHEN $3='mobile_money' THEN $7 WHEN $3='bank' THEN NULL ELSE mobile_money_number END,
+                bank_account_name=CASE WHEN $3='bank' THEN $5 WHEN $3='mobile_money' THEN NULL ELSE bank_account_name END,
+                bank_account_number=CASE WHEN $3='bank' THEN $6 WHEN $3='mobile_money' THEN NULL ELSE bank_account_number END,
+                mobile_money_provider=CASE WHEN $3='mobile_money' THEN $7 WHEN $3='bank' THEN NULL ELSE mobile_money_provider END,
+                mobile_money_number=CASE WHEN $3='mobile_money' THEN $8 WHEN $3='bank' THEN NULL ELSE mobile_money_number END,
                 updated_at=NOW()
-             WHERE user_id=$8`,
+             WHERE user_id=$9`,
             [phone || null, email || null, pm,
-             bank_name || null, bank_account_number || null,
-             mobile_money_provider || null, mobile_money_number || null,
-             req.user.id]
+            bank_name || null, bank_account_name || null, bank_account_number || null,
+            mobile_money_provider || null, mobile_money_number || null,
+            req.user.id]
         );
         await db.query(
             "UPDATE users SET phone=COALESCE($1,phone), email=COALESCE($2,email), updated_at=NOW() WHERE id=$3",
@@ -82,7 +83,9 @@ router.get('/payslip/:id/pdf', async (req, res) => {
         if (!teacher) return res.status(404).json({ error: 'Teacher not found.' });
 
         const { rows: [item] } = await db.query(`
-            SELECT pi.*, t.full_name, t.employee_id, t.position, t.salary_scale, p.month, p.year
+            SELECT pi.*, t.full_name, t.employee_id, t.position, t.salary_scale, p.month, p.year,
+                   t.payment_method, t.bank_name, t.bank_account_name, t.bank_account_number, 
+                   t.mobile_money_provider, t.mobile_money_number
             FROM payroll_items pi
             JOIN teachers t ON pi.teacher_id = t.id
             JOIN payroll p ON pi.payroll_id = p.id
@@ -112,18 +115,31 @@ router.get('/payslip/:id/pdf', async (req, res) => {
         doc.text(`Employee Name: ${item.full_name}`, 50, infoY);
         doc.text(`Employee ID: ${item.employee_id}`, 50, infoY + 18);
         doc.text(`Position: ${item.position || 'N/A'}`, 50, infoY + 36);
-        doc.text(`Salary Scale: ${item.salary_scale}`, 350, infoY);
-        doc.text(`Pay Period: ${item.month}/${item.year}`, 350, infoY + 18);
-        doc.text(`Payment Status: ${item.payment_status}`, 350, infoY + 36);
+        doc.text(`Pay Period: ${item.month}/${item.year}`, 350, infoY);
+        doc.text(`Payment Status: ${item.payment_status}`, 350, infoY + 18);
 
-        let tableY = infoY + 70;
+        // Add Bank details section
+        let bankY = infoY + 60;
+        doc.fontSize(10).fillColor('#000');
+        if (item.payment_method === 'mobile_money') {
+            doc.text(`Payment Method: Mobile Money`, 50, bankY);
+            doc.text(`Provider: ${item.mobile_money_provider || 'N/A'}`, 50, bankY + 14);
+            doc.text(`Mobile Number: ${item.mobile_money_number || 'N/A'}`, 50, bankY + 28);
+        } else {
+            doc.text(`Payment Method: Bank Transfer`, 50, bankY);
+            doc.text(`Bank Name: ${item.bank_name || 'N/A'}`, 50, bankY + 14);
+            doc.text(`Account Name: ${item.bank_account_name || 'N/A'}`, 300, bankY + 14);
+            doc.text(`Account Number: ${item.bank_account_number || 'N/A'}`, 50, bankY + 28);
+        }
+
+        let tableY = bankY + 50;
         doc.fontSize(12).fillColor('#DC2626').text('EARNINGS', 50, tableY);
         tableY += 20;
         doc.fontSize(9).fillColor('#000');
 
         [['Basic Salary', item.basic_salary], ['Housing Allowance', item.housing_allowance],
-         ['Transport Allowance', item.transport_allowance], ['Medical Allowance', item.medical_allowance],
-         ['Other Allowance', item.other_allowance]].forEach(([label, val]) => {
+        ['Transport Allowance', item.transport_allowance], ['Medical Allowance', item.medical_allowance],
+        ['Other Allowance', item.other_allowance]].forEach(([label, val]) => {
             doc.text(label, 60, tableY);
             doc.text(`${currency} ${Number(val).toLocaleString()}`, 350, tableY, { width: 150, align: 'right' });
             tableY += 16;
@@ -141,7 +157,7 @@ router.get('/payslip/:id/pdf', async (req, res) => {
         doc.fontSize(9).fillColor('#000');
 
         [['PAYE Tax', item.tax_amount], ['NSSF', item.nssf_amount],
-         ['Loan Deduction', item.loan_deduction], ['Other Deductions', item.other_deduction]].forEach(([label, val]) => {
+        ['Loan Deduction', item.loan_deduction], ['Other Deductions', item.other_deduction]].forEach(([label, val]) => {
             doc.text(label, 60, tableY);
             doc.text(`${currency} ${Number(val).toLocaleString()}`, 350, tableY, { width: 150, align: 'right' });
             tableY += 16;

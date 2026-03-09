@@ -429,6 +429,7 @@ async function showCreateTeacherModal() {
     document.getElementById('teacherUsernameHint').textContent = '';
     document.getElementById('teacherPaymentMethod').value = 'bank';
     document.getElementById('teacherBankName').value = '';
+    document.getElementById('teacherBankAccountName').value = '';
     document.getElementById('teacherBankAccountNumber').value = '';
     document.getElementById('teacherMobileProvider').value = 'MTN Mobile Money';
     document.getElementById('teacherMobileNumber').value = '';
@@ -453,6 +454,7 @@ async function editTeacher(id) {
     const pm = teacher.payment_method || 'bank';
     document.getElementById('teacherPaymentMethod').value = pm;
     document.getElementById('teacherBankName').value = teacher.bank_name || '';
+    document.getElementById('teacherBankAccountName').value = teacher.bank_account_name || '';
     document.getElementById('teacherBankAccountNumber').value = teacher.bank_account_number || '';
     document.getElementById('teacherMobileProvider').value = teacher.mobile_money_provider || 'MTN Mobile Money';
     document.getElementById('teacherMobileNumber').value = teacher.mobile_money_number || '';
@@ -479,9 +481,10 @@ async function saveTeacher() {
     };
     if (pm === 'bank') {
         data.bank_name = document.getElementById('teacherBankName').value.trim();
+        data.bank_account_name = document.getElementById('teacherBankAccountName').value.trim();
         data.bank_account_number = document.getElementById('teacherBankAccountNumber').value.trim();
-        if (!data.bank_name || !data.bank_account_number) {
-            showToast('Bank name and account number are required for bank payments', 'error');
+        if (!data.bank_name || !data.bank_account_name || !data.bank_account_number) {
+            showToast('Bank name, account name, and account number are required for bank payments', 'error');
             return;
         }
     } else {

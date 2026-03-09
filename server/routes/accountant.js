@@ -90,19 +90,19 @@ router.post('/payroll/process', async (req, res) => {
         let totalGross = 0, totalDeductions = 0, totalNet = 0;
 
         for (const t of teacherList) {
-            const basic      = Number(t.basic_salary)      || 0;
-            const housing    = Number(t.housing_allowance)  || 0;
-            const transport  = Number(t.transport_allowance)|| 0;
-            const medical    = Number(t.medical_allowance)  || 0;
-            const otherAllow = Number(t.other_allowance)    || 0;
-            const gross      = basic + housing + transport + medical + otherAllow;
+            const basic = Number(t.basic_salary) || 0;
+            const housing = Number(t.housing_allowance) || 0;
+            const transport = Number(t.transport_allowance) || 0;
+            const medical = Number(t.medical_allowance) || 0;
+            const otherAllow = Number(t.other_allowance) || 0;
+            const gross = basic + housing + transport + medical + otherAllow;
 
-            const taxAmount  = basic * (Number(t.tax_percentage)  || 0) / 100;
+            const taxAmount = basic * (Number(t.tax_percentage) || 0) / 100;
             const nssfAmount = basic * (Number(t.nssf_percentage) || 0) / 100;
-            const loanDed    = Number(t.loan_deduction)  || 0;
-            const otherDed   = Number(t.other_deduction) || 0;
-            const totalDed   = taxAmount + nssfAmount + loanDed + otherDed;
-            const net        = gross - totalDed;
+            const loanDed = Number(t.loan_deduction) || 0;
+            const otherDed = Number(t.other_deduction) || 0;
+            const totalDed = taxAmount + nssfAmount + loanDed + otherDed;
+            const net = gross - totalDed;
 
             await client.query(
                 `INSERT INTO payroll_items
@@ -111,12 +111,12 @@ router.post('/payroll/process', async (req, res) => {
                      loan_deduction, other_deduction, total_deductions, net_salary)
                  VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
                 [payrollId, t.teacher_id, basic, housing, transport, medical, otherAllow,
-                 gross, taxAmount, nssfAmount, loanDed, otherDed, totalDed, net]
+                    gross, taxAmount, nssfAmount, loanDed, otherDed, totalDed, net]
             );
 
-            totalGross       += gross;
-            totalDeductions  += totalDed;
-            totalNet         += net;
+            totalGross += gross;
+            totalDeductions += totalDed;
+            totalNet += net;
         }
 
         await client.query(
@@ -184,7 +184,7 @@ router.post('/payroll/:id/approve', async (req, res) => {
                 db.query(
                     "INSERT INTO notifications (user_id, title, message) VALUES ($1,$2,$3)",
                     [item.user_id, 'Salary Processed',
-                     `Your salary for ${payroll.month}/${payroll.year} has been processed. Net amount: ${Number(item.net_salary).toLocaleString()}`]
+                    `Your salary for ${payroll.month}/${payroll.year} has been processed. Net amount: ${Number(item.net_salary).toLocaleString()}`]
                 ).catch(err => console.error('Notification insert error:', err));
             }
         }
@@ -271,8 +271,8 @@ router.get('/reports/export/excel/:payrollId', async (req, res) => {
         sheet.mergeCells('A2:N2');
         sheet.getCell('A2').value = `Status: ${pInfo.status} | Total Net: ${pInfo.total_net}`;
 
-        const headers = ['#','Employee ID','Name','Scale','Basic Salary','Housing','Transport','Medical',
-                         'Other Allow.','Gross','Tax','NSSF','Loan','Other Ded.','Total Ded.','Net Salary','Status'];
+        const headers = ['#', 'Employee ID', 'Name', 'Scale', 'Basic Salary', 'Housing', 'Transport', 'Medical',
+            'Other Allow.', 'Gross', 'Tax', 'NSSF', 'Loan', 'Other Ded.', 'Total Ded.', 'Net Salary', 'Status'];
         const headerRow = sheet.addRow(headers);
         headerRow.font = { bold: true };
         headerRow.eachCell(cell => {
@@ -333,7 +333,7 @@ router.get('/reports/export/pdf/:payrollId', async (req, res) => {
         const startX = 30;
         let y = doc.y;
         const colWidths = [25, 55, 100, 50, 65, 55, 55, 55, 55, 55, 50, 50, 50];
-        const headers = ['#','Emp ID','Name','Scale','Basic','Housing','Transport','Gross','Tax','NSSF','Deductions','Net','Status'];
+        const headers = ['#', 'Emp ID', 'Name', 'Scale', 'Basic', 'Housing', 'Transport', 'Gross', 'Tax', 'NSSF', 'Deductions', 'Net', 'Status'];
 
         let x = startX;
         headers.forEach((h, i) => {
@@ -380,7 +380,9 @@ router.get('/payslip/:payrollItemId/pdf', async (req, res) => {
     try {
         const db = getDb();
         const { rows: [item] } = await db.query(`
-            SELECT pi.*, t.full_name, t.employee_id, t.position, t.salary_scale, p.month, p.year
+            SELECT pi.*, t.full_name, t.employee_id, t.position, t.salary_scale, p.month, p.year,
+                   t.payment_method, t.bank_name, t.bank_account_name, t.bank_account_number, 
+                   t.mobile_money_provider, t.mobile_money_number
             FROM payroll_items pi
             JOIN teachers t ON pi.teacher_id = t.id
             JOIN payroll p ON pi.payroll_id = p.id
@@ -410,18 +412,31 @@ router.get('/payslip/:payrollItemId/pdf', async (req, res) => {
         doc.text(`Employee Name: ${item.full_name}`, 50, infoY);
         doc.text(`Employee ID: ${item.employee_id}`, 50, infoY + 18);
         doc.text(`Position: ${item.position || 'N/A'}`, 50, infoY + 36);
-        doc.text(`Salary Scale: ${item.salary_scale}`, 350, infoY);
-        doc.text(`Pay Period: ${item.month}/${item.year}`, 350, infoY + 18);
-        doc.text(`Payment Status: ${item.payment_status}`, 350, infoY + 36);
+        doc.text(`Pay Period: ${item.month}/${item.year}`, 350, infoY);
+        doc.text(`Payment Status: ${item.payment_status}`, 350, infoY + 18);
 
-        let tableY = infoY + 70;
+        // Add Bank details section
+        let bankY = infoY + 60;
+        doc.fontSize(10).fillColor('#000');
+        if (item.payment_method === 'mobile_money') {
+            doc.text(`Payment Method: Mobile Money`, 50, bankY);
+            doc.text(`Provider: ${item.mobile_money_provider || 'N/A'}`, 50, bankY + 14);
+            doc.text(`Mobile Number: ${item.mobile_money_number || 'N/A'}`, 50, bankY + 28);
+        } else {
+            doc.text(`Payment Method: Bank Transfer`, 50, bankY);
+            doc.text(`Bank Name: ${item.bank_name || 'N/A'}`, 50, bankY + 14);
+            doc.text(`Account Name: ${item.bank_account_name || 'N/A'}`, 300, bankY + 14);
+            doc.text(`Account Number: ${item.bank_account_number || 'N/A'}`, 50, bankY + 28);
+        }
+
+        let tableY = bankY + 50;
         doc.fontSize(12).fillColor('#DC2626').text('EARNINGS', 50, tableY);
         tableY += 20;
         doc.fontSize(9).fillColor('#000');
 
         [['Basic Salary', item.basic_salary], ['Housing Allowance', item.housing_allowance],
-         ['Transport Allowance', item.transport_allowance], ['Medical Allowance', item.medical_allowance],
-         ['Other Allowance', item.other_allowance]].forEach(([label, val]) => {
+        ['Transport Allowance', item.transport_allowance], ['Medical Allowance', item.medical_allowance],
+        ['Other Allowance', item.other_allowance]].forEach(([label, val]) => {
             doc.text(label, 60, tableY);
             doc.text(`${currency} ${Number(val).toLocaleString()}`, 350, tableY, { width: 150, align: 'right' });
             tableY += 16;
@@ -439,7 +454,7 @@ router.get('/payslip/:payrollItemId/pdf', async (req, res) => {
         doc.fontSize(9).fillColor('#000');
 
         [['PAYE Tax', item.tax_amount], ['NSSF', item.nssf_amount],
-         ['Loan Deduction', item.loan_deduction], ['Other Deductions', item.other_deduction]].forEach(([label, val]) => {
+        ['Loan Deduction', item.loan_deduction], ['Other Deductions', item.other_deduction]].forEach(([label, val]) => {
             doc.text(label, 60, tableY);
             doc.text(`${currency} ${Number(val).toLocaleString()}`, 350, tableY, { width: 150, align: 'right' });
             tableY += 16;
@@ -481,11 +496,11 @@ router.get('/stats', async (req, res) => {
             db.query("SELECT COALESCE(SUM(total_net), 0) as total FROM payroll WHERE status IN ('approved','paid')"),
         ]);
         res.json({
-            total_teachers:   parseInt(teachersR.rows[0].cnt) || 0,
-            total_payrolls:   parseInt(payrollsR.rows[0].cnt) || 0,
-            pending_payrolls: parseInt(pendingR.rows[0].cnt)  || 0,
-            total_paid:       Number(paidR.rows[0].total)     || 0,
-            latest_payroll:   latestR.rows[0] || null,
+            total_teachers: parseInt(teachersR.rows[0].cnt) || 0,
+            total_payrolls: parseInt(payrollsR.rows[0].cnt) || 0,
+            pending_payrolls: parseInt(pendingR.rows[0].cnt) || 0,
+            total_paid: Number(paidR.rows[0].total) || 0,
+            latest_payroll: latestR.rows[0] || null,
         });
     } catch (err) { res.status(500).json({ error: 'Failed to fetch stats.' }); }
 });

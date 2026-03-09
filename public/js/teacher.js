@@ -47,6 +47,7 @@ async function loadProfile() {
             document.getElementById('profMobileProviderField').style.display = 'none';
             document.getElementById('profMobileNumField').style.display = 'none';
             document.getElementById('profBankName').textContent = profileData.bank_name || 'Not set';
+            document.getElementById('profBankAccountName').textContent = profileData.bank_account_name || 'Not set';
             document.getElementById('profBankAccountNumber').textContent = profileData.bank_account_number || 'Not set';
         }
     } catch (err) {
@@ -75,6 +76,7 @@ function toggleEditProfile() {
         const pm = profileData?.payment_method || 'bank';
         document.getElementById('editPaymentMethod').value = pm;
         document.getElementById('editBankName').value = profileData?.bank_name || '';
+        document.getElementById('editBankAccountName').value = profileData?.bank_account_name || '';
         document.getElementById('editBankAccountNumber').value = profileData?.bank_account_number || '';
         document.getElementById('editMobileProvider').value = profileData?.mobile_money_provider || 'MTN Mobile Money';
         document.getElementById('editMobileNumber').value = profileData?.mobile_money_number || '';
@@ -93,6 +95,7 @@ async function saveProfile() {
     const body = { email, phone, payment_method: pm };
     if (pm === 'bank') {
         body.bank_name = document.getElementById('editBankName').value.trim();
+        body.bank_account_name = document.getElementById('editBankAccountName').value.trim();
         body.bank_account_number = document.getElementById('editBankAccountNumber').value.trim();
     } else {
         body.mobile_money_provider = document.getElementById('editMobileProvider').value;
@@ -119,10 +122,10 @@ async function loadPayslips() {
             return;
         }
         tbody.innerHTML = payslips.map(p => {
-            const housing   = parseFloat(p.housing_allowance)   || 0;
+            const housing = parseFloat(p.housing_allowance) || 0;
             const transport = parseFloat(p.transport_allowance) || 0;
-            const medical   = parseFloat(p.medical_allowance)   || 0;
-            const other     = parseFloat(p.other_allowance)     || 0;
+            const medical = parseFloat(p.medical_allowance) || 0;
+            const other = parseFloat(p.other_allowance) || 0;
             const totalAllowances = housing + transport + medical + other;
             const allowanceBreakdown = `
               <div class="salary-breakdown">

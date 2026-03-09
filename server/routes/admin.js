@@ -129,7 +129,7 @@ router.post('/teachers', async (req, res) => {
         const {
             full_name, email, phone, position, salary_scale, date_joined,
             username: requestedUsername,
-            payment_method, bank_name, bank_account_number, mobile_money_provider, mobile_money_number
+            payment_method, bank_name, bank_account_name, bank_account_number, mobile_money_provider, mobile_money_number
         } = req.body;
         if (!full_name || !salary_scale)
             return res.status(400).json({ error: 'Full name and salary scale are required.' });
@@ -153,15 +153,16 @@ router.post('/teachers', async (req, res) => {
         await db.query(
             `INSERT INTO teachers
                 (user_id, employee_id, full_name, email, phone, position, salary_scale, date_joined,
-                 payment_method, bank_name, bank_account_number, mobile_money_provider, mobile_money_number)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+                 payment_method, bank_name, bank_account_name, bank_account_number, mobile_money_provider, mobile_money_number)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
             [newUser.id, empId, full_name, email || '', phone || '', position || '',
-             salary_scale, date_joined || new Date().toISOString().split('T')[0],
-             pm,
-             pm === 'bank' ? (bank_name || '') : null,
-             pm === 'bank' ? (bank_account_number || '') : null,
-             pm === 'mobile_money' ? (mobile_money_provider || '') : null,
-             pm === 'mobile_money' ? (mobile_money_number || '') : null]
+                salary_scale, date_joined || new Date().toISOString().split('T')[0],
+                pm,
+            pm === 'bank' ? (bank_name || '') : null,
+            pm === 'bank' ? (bank_account_name || '') : null,
+            pm === 'bank' ? (bank_account_number || '') : null,
+            pm === 'mobile_money' ? (mobile_money_provider || '') : null,
+            pm === 'mobile_money' ? (mobile_money_number || '') : null]
         );
         logAudit(db, req.user.id, req.user.username, 'CREATE_TEACHER', `Added teacher: ${full_name} (${empId})`, req.ip);
         res.status(201).json({
@@ -178,7 +179,7 @@ router.put('/teachers/:id', async (req, res) => {
     try {
         const {
             full_name, email, phone, position, salary_scale,
-            payment_method, bank_name, bank_account_number, mobile_money_provider, mobile_money_number
+            payment_method, bank_name, bank_account_name, bank_account_number, mobile_money_provider, mobile_money_number
         } = req.body;
         const db = getDb();
         const pm = payment_method || null;
@@ -191,14 +192,15 @@ router.put('/teachers/:id', async (req, res) => {
                 salary_scale=COALESCE($5,salary_scale),
                 payment_method=COALESCE($6,payment_method),
                 bank_name=CASE WHEN $6='bank' THEN $7 WHEN $6='mobile_money' THEN NULL ELSE bank_name END,
-                bank_account_number=CASE WHEN $6='bank' THEN $8 WHEN $6='mobile_money' THEN NULL ELSE bank_account_number END,
-                mobile_money_provider=CASE WHEN $6='mobile_money' THEN $9 WHEN $6='bank' THEN NULL ELSE mobile_money_provider END,
-                mobile_money_number=CASE WHEN $6='mobile_money' THEN $10 WHEN $6='bank' THEN NULL ELSE mobile_money_number END,
+                bank_account_name=CASE WHEN $6='bank' THEN $8 WHEN $6='mobile_money' THEN NULL ELSE bank_account_name END,
+                bank_account_number=CASE WHEN $6='bank' THEN $9 WHEN $6='mobile_money' THEN NULL ELSE bank_account_number END,
+                mobile_money_provider=CASE WHEN $6='mobile_money' THEN $10 WHEN $6='bank' THEN NULL ELSE mobile_money_provider END,
+                mobile_money_number=CASE WHEN $6='mobile_money' THEN $11 WHEN $6='bank' THEN NULL ELSE mobile_money_number END,
                 updated_at=NOW()
-             WHERE id=$11`,
+             WHERE id=$12`,
             [full_name || null, email || null, phone || null, position || null, salary_scale || null,
-             pm, bank_name || null, bank_account_number || null,
-             mobile_money_provider || null, mobile_money_number || null, req.params.id]
+                pm, bank_name || null, bank_account_name || null, bank_account_number || null,
+            mobile_money_provider || null, mobile_money_number || null, req.params.id]
         );
         const { rows: [teacher] } = await db.query("SELECT user_id FROM teachers WHERE id = $1", [req.params.id]);
         if (teacher && teacher.user_id) {
@@ -399,9 +401,9 @@ router.post('/salary-structures', async (req, res) => {
                 basic_salary=$2, housing_allowance=$3, transport_allowance=$4,
                 medical_allowance=$5, other_allowance=$6, tax_percentage=$7,
                 nssf_percentage=$8, loan_deduction=$9, other_deduction=$10, updated_at=NOW()`,
-            [salary_scale, basic_salary, housing_allowance||0, transport_allowance||0,
-             medical_allowance||0, other_allowance||0, tax_percentage||0,
-             nssf_percentage||5, loan_deduction||0, other_deduction||0]
+            [salary_scale, basic_salary, housing_allowance || 0, transport_allowance || 0,
+                medical_allowance || 0, other_allowance || 0, tax_percentage || 0,
+                nssf_percentage || 5, loan_deduction || 0, other_deduction || 0]
         );
         logAudit(db, req.user.id, req.user.username, 'UPDATE_SALARY_STRUCTURE', `Updated salary structure: ${salary_scale}`, req.ip);
         res.json({ message: 'Salary structure saved successfully.' });
@@ -506,12 +508,12 @@ router.get('/stats', async (req, res) => {
             db.query("SELECT * FROM payroll ORDER BY created_at DESC LIMIT 1"),
         ]);
         res.json({
-            total_users:       parseInt(usersR.rows[0].cnt)       || 0,
-            total_teachers:    parseInt(teachersR.rows[0].cnt)    || 0,
+            total_users: parseInt(usersR.rows[0].cnt) || 0,
+            total_teachers: parseInt(teachersR.rows[0].cnt) || 0,
             total_accountants: parseInt(accountantsR.rows[0].cnt) || 0,
-            total_admins:      parseInt(adminsR.rows[0].cnt)      || 0,
-            total_payrolls:    parseInt(payrollsR.rows[0].cnt)    || 0,
-            recent_payroll:    recentR.rows[0] || null,
+            total_admins: parseInt(adminsR.rows[0].cnt) || 0,
+            total_payrolls: parseInt(payrollsR.rows[0].cnt) || 0,
+            recent_payroll: recentR.rows[0] || null,
         });
     } catch (err) { res.status(500).json({ error: 'Failed to fetch stats.' }); }
 });
