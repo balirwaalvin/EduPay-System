@@ -15,7 +15,14 @@ router.get('/teachers', async (req, res) => {
         const db = getDb();
         const { rows } = await db.query(`
             SELECT t.*, s.basic_salary, s.housing_allowance, s.transport_allowance, s.medical_allowance,
-                   s.other_allowance, s.tax_percentage, s.nssf_percentage, s.loan_deduction, s.other_deduction
+                   s.other_allowance, s.tax_percentage, s.nssf_percentage, s.loan_deduction, s.other_deduction,
+                   COALESCE((
+                       SELECT SUM(ar.amount)
+                       FROM advance_requests ar
+                       WHERE ar.teacher_id = t.id
+                         AND ar.status = 'Approved'
+                         AND ar.deducted_payroll_id IS NULL
+                   ), 0) AS next_payroll_advance
             FROM teachers t
             LEFT JOIN salary_structures s ON t.salary_scale = s.salary_scale
             WHERE t.is_active = 1
@@ -511,18 +518,20 @@ router.get('/payslip/:payrollItemId/pdf', async (req, res) => {
 router.get('/stats', async (req, res) => {
     try {
         const db = getDb();
-        const [teachersR, payrollsR, pendingR, latestR, paidR] = await Promise.all([
+        const [teachersR, payrollsR, pendingR, latestR, paidR, pendingAdvanceR] = await Promise.all([
             db.query("SELECT COUNT(*) as cnt FROM teachers WHERE is_active = 1"),
             db.query("SELECT COUNT(*) as cnt FROM payroll"),
             db.query("SELECT COUNT(*) as cnt FROM payroll WHERE status IN ('draft','processed')"),
             db.query("SELECT * FROM payroll ORDER BY created_at DESC LIMIT 1"),
             db.query("SELECT COALESCE(SUM(total_net), 0) as total FROM payroll WHERE status IN ('approved','paid')"),
+            db.query("SELECT COALESCE(SUM(amount), 0) as total FROM advance_requests WHERE status='Approved' AND deducted_payroll_id IS NULL"),
         ]);
         res.json({
             total_teachers: parseInt(teachersR.rows[0].cnt) || 0,
             total_payrolls: parseInt(payrollsR.rows[0].cnt) || 0,
             pending_payrolls: parseInt(pendingR.rows[0].cnt) || 0,
             total_paid: Number(paidR.rows[0].total) || 0,
+            pending_advance_total: Number(pendingAdvanceR.rows[0].total) || 0,
             latest_payroll: latestR.rows[0] || null,
         });
     } catch (err) { res.status(500).json({ error: 'Failed to fetch stats.' }); }

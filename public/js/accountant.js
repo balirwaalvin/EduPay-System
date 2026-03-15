@@ -21,6 +21,7 @@ async function loadAccDashboard() {
         document.getElementById('statPayrolls').textContent = stats.total_payrolls;
         document.getElementById('statPending').textContent = stats.pending_payrolls;
         document.getElementById('statTotalPaid').textContent = formatCurrency(stats.total_paid);
+    document.getElementById('statPendingAdvance').textContent = formatCurrency(stats.pending_advance_total);
     } catch (err) { console.error(err); }
 }
 
@@ -30,7 +31,7 @@ async function loadTeacherRecords() {
         const teachers = await apiRequest('/accountant/teachers');
         const tbody = document.getElementById('teacherRecordsBody');
         if (!teachers.length) {
-            tbody.innerHTML = '<tr><td colspan="3" class="text-center" style="padding:32px;color:var(--text-light);">No teachers found</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="4" class="text-center" style="padding:32px;color:var(--text-light);">No teachers found</td></tr>';
             return;
         }
         tbody.innerHTML = teachers.map(t => {
@@ -53,6 +54,9 @@ async function loadTeacherRecords() {
               <div class="salary-breakdown">
                 <div class="breakdown-row"><span>Tax (PAYE)</span><span>${t.tax_percentage || 0}%</span></div>
                 <div class="breakdown-row"><span>NSSF</span><span>${t.nssf_percentage || 0}%</span></div>
+                <div class="breakdown-row"><span>Loan</span><span>${formatCurrency(t.loan_deduction)}</span></div>
+                <div class="breakdown-row"><span>Other</span><span>${formatCurrency(t.other_deduction)}</span></div>
+                <div class="breakdown-row breakdown-total"><span>Next Payroll Advance</span><span>${formatCurrency(t.next_payroll_advance)}</span></div>
               </div>`;
 
             let paymentDetails = '-';
@@ -73,10 +77,11 @@ async function loadTeacherRecords() {
                 ${t.full_name}
             </a>
           </td>
+          <td><strong>${formatCurrency(t.next_payroll_advance)}</strong></td>
           <td><button class="btn btn-sm btn-secondary" onclick="toggleTeacherDetails('${t.employee_id}')">👁️ View Details</button></td>
         </tr>
         <tr id="details-${t.employee_id}" class="teacher-details-row" style="display: none; background: var(--gray-50);">
-          <td colspan="3" style="padding: 0;">
+          <td colspan="4" style="padding: 0;">
             <div style="padding: 24px; border-bottom: 2px solid var(--gray-200);">
               <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 24px;">
                 <div style="background: var(--white); padding: 16px; border-radius: var(--radius); border: 1px solid var(--gray-200);">
