@@ -34,6 +34,10 @@
                     <div class="nav-item" data-section="leave" onclick="switchSection('leave');loadLeaveRequests();">
                         <span class="nav-icon">📅</span> Leave Requests
                     </div>
+                    <div class="nav-item" data-section="advances"
+                        onclick="switchSection('advances');loadAdvanceRequests();">
+                        <span class="nav-icon">💸</span> Advance Requests
+                    </div>
                 </div>
                 <div class="nav-section">
                     <div class="nav-section-title">System</div>
@@ -296,6 +300,32 @@
                     </div>
                 </div>
 
+                <!-- Advance Requests -->
+                <div id="advances" class="page-section">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>My Advance Requests</h3>
+                            <button class="btn btn-primary" onclick="openAdvanceModal()">+ New Request</button>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>Requested On</th>
+                                            <th>Amount</th>
+                                            <th>Reason</th>
+                                            <th>Status</th>
+                                            <th>Approved By</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="advanceBody"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Notifications -->
                 <div id="notifications" class="page-section">
                     <div class="card">
@@ -372,6 +402,32 @@
                     </div>
                     <div class="modal-footer" style="margin-top:20px; padding:0;">
                         <button type="button" class="btn btn-secondary" onclick="closeLeaveModal()">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Submit Request</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Advance Request Modal -->
+    <div id="advanceModal" class="modal-overlay">
+        <div class="modal" style="max-width: 500px;">
+            <div class="modal-header">
+                <h2>New Advance Request</h2>
+                <button class="modal-close" onclick="closeAdvanceModal()">✕</button>
+            </div>
+            <div class="modal-body">
+                <form id="advanceForm" onsubmit="submitAdvanceRequest(event)">
+                    <div class="form-group">
+                        <label>Amount (UGX)</label>
+                        <input type="number" id="advanceAmount" class="form-control" min="1" step="1" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Reason</label>
+                        <textarea id="advanceReason" class="form-control" rows="3" required></textarea>
+                    </div>
+                    <div class="modal-footer" style="margin-top:20px; padding:0;">
+                        <button type="button" class="btn btn-secondary" onclick="closeAdvanceModal()">Cancel</button>
                         <button type="submit" class="btn btn-primary">Submit Request</button>
                     </div>
                 </form>

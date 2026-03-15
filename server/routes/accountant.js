@@ -76,6 +76,12 @@ router.post('/payroll/process', async (req, res) => {
 
         // Remove existing draft if any
         if (existRows.length) {
+            await client.query(
+                `UPDATE advance_requests
+                 SET status = 'Approved', deducted_payroll_id = NULL, deducted_at = NULL, updated_at = NOW()
+                 WHERE deducted_payroll_id = $1 AND status = 'Deducted'`,
+                [existRows[0].id]
+            );
             await client.query("DELETE FROM payroll_items WHERE payroll_id = $1", [existRows[0].id]);
             await client.query("DELETE FROM payroll WHERE id = $1", [existRows[0].id]);
         }
@@ -100,19 +106,35 @@ router.post('/payroll/process', async (req, res) => {
             const taxAmount = basic * (Number(t.tax_percentage) || 0) / 100;
             const nssfAmount = basic * (Number(t.nssf_percentage) || 0) / 100;
             const loanDed = Number(t.loan_deduction) || 0;
+            const { rows: [advanceRow] } = await client.query(
+                `SELECT COALESCE(SUM(amount), 0) AS total
+                 FROM advance_requests
+                 WHERE teacher_id = $1 AND status = 'Approved' AND deducted_payroll_id IS NULL`,
+                [t.teacher_id]
+            );
+            const advanceDed = Number(advanceRow?.total) || 0;
             const otherDed = Number(t.other_deduction) || 0;
-            const totalDed = taxAmount + nssfAmount + loanDed + otherDed;
+            const totalDed = taxAmount + nssfAmount + loanDed + advanceDed + otherDed;
             const net = gross - totalDed;
 
             await client.query(
                 `INSERT INTO payroll_items
                     (payroll_id, teacher_id, basic_salary, housing_allowance, transport_allowance,
                      medical_allowance, other_allowance, gross_salary, tax_amount, nssf_amount,
-                     loan_deduction, other_deduction, total_deductions, net_salary)
-                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+                     loan_deduction, advance_deduction, other_deduction, total_deductions, net_salary)
+                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
                 [payrollId, t.teacher_id, basic, housing, transport, medical, otherAllow,
-                    gross, taxAmount, nssfAmount, loanDed, otherDed, totalDed, net]
+                    gross, taxAmount, nssfAmount, loanDed, advanceDed, otherDed, totalDed, net]
             );
+
+            if (advanceDed > 0) {
+                await client.query(
+                    `UPDATE advance_requests
+                     SET status = 'Deducted', deducted_payroll_id = $1, deducted_at = NOW(), updated_at = NOW()
+                     WHERE teacher_id = $2 AND status = 'Approved' AND deducted_payroll_id IS NULL`,
+                    [payrollId, t.teacher_id]
+                );
+            }
 
             totalGross += gross;
             totalDeductions += totalDed;
@@ -272,7 +294,7 @@ router.get('/reports/export/excel/:payrollId', async (req, res) => {
         sheet.getCell('A2').value = `Status: ${pInfo.status} | Total Net: ${pInfo.total_net}`;
 
         const headers = ['#', 'Employee ID', 'Name', 'Scale', 'Basic Salary', 'Housing', 'Transport', 'Medical',
-            'Other Allow.', 'Gross', 'Tax', 'NSSF', 'Loan', 'Other Ded.', 'Total Ded.', 'Net Salary', 'Status'];
+            'Other Allow.', 'Gross', 'Tax', 'NSSF', 'Loan', 'Advance', 'Other Ded.', 'Total Ded.', 'Net Salary', 'Status'];
         const headerRow = sheet.addRow(headers);
         headerRow.font = { bold: true };
         headerRow.eachCell(cell => {
@@ -286,7 +308,7 @@ router.get('/reports/export/excel/:payrollId', async (req, res) => {
                 item.basic_salary, item.housing_allowance, item.transport_allowance,
                 item.medical_allowance, item.other_allowance, item.gross_salary,
                 item.tax_amount, item.nssf_amount, item.loan_deduction,
-                item.other_deduction, item.total_deductions, item.net_salary,
+                item.advance_deduction, item.other_deduction, item.total_deductions, item.net_salary,
                 item.payment_status
             ]);
         });
@@ -332,8 +354,8 @@ router.get('/reports/export/pdf/:payrollId', async (req, res) => {
 
         const startX = 30;
         let y = doc.y;
-        const colWidths = [25, 55, 100, 50, 65, 55, 55, 55, 55, 55, 50, 50, 50];
-        const headers = ['#', 'Emp ID', 'Name', 'Scale', 'Basic', 'Housing', 'Transport', 'Gross', 'Tax', 'NSSF', 'Deductions', 'Net', 'Status'];
+        const colWidths = [25, 55, 95, 50, 60, 55, 55, 55, 50, 50, 50, 55, 50, 50];
+        const headers = ['#', 'Emp ID', 'Name', 'Scale', 'Basic', 'Housing', 'Transport', 'Gross', 'Tax', 'NSSF', 'Loan', 'Advance', 'Net', 'Status'];
 
         let x = startX;
         headers.forEach((h, i) => {
@@ -356,7 +378,8 @@ router.get('/reports/export/pdf/:payrollId', async (req, res) => {
                 Number(item.gross_salary).toLocaleString(),
                 Number(item.tax_amount).toLocaleString(),
                 Number(item.nssf_amount).toLocaleString(),
-                Number(item.total_deductions).toLocaleString(),
+                Number(item.loan_deduction).toLocaleString(),
+                Number(item.advance_deduction).toLocaleString(),
                 Number(item.net_salary).toLocaleString(),
                 item.payment_status
             ];
@@ -454,7 +477,7 @@ router.get('/payslip/:payrollItemId/pdf', async (req, res) => {
         doc.fontSize(9).fillColor('#000');
 
         [['PAYE Tax', item.tax_amount], ['NSSF', item.nssf_amount],
-        ['Loan Deduction', item.loan_deduction], ['Other Deductions', item.other_deduction]].forEach(([label, val]) => {
+        ['Loan Deduction', item.loan_deduction], ['Advance Deduction', item.advance_deduction], ['Other Deductions', item.other_deduction]].forEach(([label, val]) => {
             doc.text(label, 60, tableY);
             doc.text(`${currency} ${Number(val).toLocaleString()}`, 350, tableY, { width: 150, align: 'right' });
             tableY += 16;

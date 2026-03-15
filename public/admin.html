@@ -41,6 +41,10 @@
                     <div class="nav-item" data-section="leave" onclick="switchSection('leave');loadLeaveRequests();">
                         <span class="nav-icon">📅</span> Leave Requests
                     </div>
+                    <div class="nav-item" data-section="advances"
+                        onclick="switchSection('advances');loadAdvanceRequests();">
+                        <span class="nav-icon">💸</span> Advance Requests
+                    </div>
                     <div class="nav-item" data-section="salary" onclick="switchSection('salary')">
                         <span class="nav-icon">💰</span> Salary Structure
                     </div>
@@ -273,6 +277,32 @@
                                         </tr>
                                     </thead>
                                     <tbody id="leaveTableBody"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Advance Requests -->
+                <div id="advances" class="page-section">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Advance Requests Management</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>Teacher</th>
+                                            <th>Requested On</th>
+                                            <th>Amount</th>
+                                            <th>Reason</th>
+                                            <th>Status</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="advancesTableBody"></tbody>
                                 </table>
                             </div>
                         </div>

@@ -166,6 +166,7 @@ async function createTables() {
       tax_amount NUMERIC DEFAULT 0,
       nssf_amount NUMERIC DEFAULT 0,
       loan_deduction NUMERIC DEFAULT 0,
+      advance_deduction NUMERIC DEFAULT 0,
       other_deduction NUMERIC DEFAULT 0,
       total_deductions NUMERIC DEFAULT 0,
       net_salary NUMERIC DEFAULT 0,
@@ -219,6 +220,36 @@ async function createTables() {
       updated_at TIMESTAMP DEFAULT NOW()
     )
   `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS advance_requests (
+      id SERIAL PRIMARY KEY,
+      teacher_id INTEGER REFERENCES teachers(id) ON DELETE CASCADE,
+      amount NUMERIC NOT NULL,
+      reason TEXT,
+      status TEXT DEFAULT 'Pending' CHECK(status IN ('Pending','Approved','Rejected','Deducted')),
+      approved_by INTEGER REFERENCES users(id),
+      approved_at TIMESTAMP,
+      deducted_payroll_id INTEGER REFERENCES payroll(id),
+      deducted_at TIMESTAMP,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    )
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_advance_requests_teacher_status
+    ON advance_requests (teacher_id, status)
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_advance_requests_deducted_payroll
+    ON advance_requests (deducted_payroll_id)
+  `);
+
+  await pool.query(`
+    ALTER TABLE payroll_items ADD COLUMN IF NOT EXISTS advance_deduction NUMERIC DEFAULT 0
+  `).catch(() => { });
 }
 
 async function seedDefaults() {

@@ -7,6 +7,7 @@ document.addEventListener('DOMContentLoaded', () => {
     loadPayslips();
     loadSalaryHistory();
     loadNotifications();
+    loadAdvanceRequests();
 });
 
 // ============ PROFILE ============
@@ -327,6 +328,71 @@ async function submitLeaveRequest(e) {
     } catch (err) { showToast(err.message, 'error'); }
 }
 
+// ============ ADVANCE REQUESTS ============
+async function loadAdvanceRequests() {
+    try {
+        const advances = await apiRequest('/teacher/advances');
+        const tbody = document.getElementById('advanceBody');
+        if (!tbody) return;
+
+        if (!advances.length) {
+            tbody.innerHTML = '<tr><td colspan="5" class="text-center" style="padding:32px;color:var(--text-light);">No advance requests yet</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = advances.map(a => {
+            let badgeClass = 'badge-warning';
+            if (a.status === 'Approved') badgeClass = 'badge-success';
+            if (a.status === 'Rejected') badgeClass = 'badge-danger';
+            if (a.status === 'Deducted') badgeClass = 'badge-info';
+
+            return `
+            <tr>
+                <td>${formatDate(a.created_at)}</td>
+                <td><strong>${formatCurrency(a.amount)}</strong></td>
+                <td>${a.reason || '-'}</td>
+                <td><span class="badge ${badgeClass}">${a.status}</span></td>
+                <td>${a.approved_by_name || '-'}</td>
+            </tr>
+            `;
+        }).join('');
+    } catch (err) { showToast('Failed to load advance requests', 'error'); }
+}
+
+function openAdvanceModal() {
+    document.getElementById('advanceForm').reset();
+    openModal('advanceModal');
+}
+
+function closeAdvanceModal() {
+    closeModal('advanceModal');
+}
+
+async function submitAdvanceRequest(e) {
+    e.preventDefault();
+    const amount = Number(document.getElementById('advanceAmount').value);
+    const reason = document.getElementById('advanceReason').value.trim();
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+        showToast('Please enter a valid amount', 'error');
+        return;
+    }
+    if (!reason) {
+        showToast('Reason is required', 'error');
+        return;
+    }
+
+    try {
+        await apiRequest('/teacher/advances', {
+            method: 'POST',
+            body: { amount, reason }
+        });
+        showToast('Advance request submitted successfully');
+        closeAdvanceModal();
+        loadAdvanceRequests();
+    } catch (err) { showToast(err.message, 'error'); }
+}
+
 // Update page title
 const originalSwitchSection = switchSection;
 switchSection = function (sectionId) {
@@ -336,6 +402,7 @@ switchSection = function (sectionId) {
         payslips: 'My Payslips',
         history: 'Salary History',
         leave: 'My Leave Requests',
+        advances: 'Advance Requests',
         notifications: 'Notifications',
         password: 'Change Password'
     };

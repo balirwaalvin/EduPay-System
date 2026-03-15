@@ -157,7 +157,7 @@ router.get('/payslip/:id/pdf', async (req, res) => {
         doc.fontSize(9).fillColor('#000');
 
         [['PAYE Tax', item.tax_amount], ['NSSF', item.nssf_amount],
-        ['Loan Deduction', item.loan_deduction], ['Other Deductions', item.other_deduction]].forEach(([label, val]) => {
+        ['Loan Deduction', item.loan_deduction], ['Advance Deduction', item.advance_deduction], ['Other Deductions', item.other_deduction]].forEach(([label, val]) => {
             doc.text(label, 60, tableY);
             doc.text(`${currency} ${Number(val).toLocaleString()}`, 350, tableY, { width: 150, align: 'right' });
             tableY += 16;
@@ -272,6 +272,63 @@ router.post('/leave', async (req, res) => {
         logAudit(db, req.user.id, req.user.username, 'CREATE_LEAVE_REQUEST', `Submitted leave request for ${leave_type}`, req.ip);
         res.json({ message: 'Leave request submitted successfully.', id: newLeave.id });
     } catch (err) { res.status(500).json({ error: 'Failed to submit leave request.' }); }
+});
+
+// ============ ADVANCE REQUESTS ============
+
+// GET /api/teacher/advances
+router.get('/advances', async (req, res) => {
+    try {
+        const db = getDb();
+        const { rows: [teacher] } = await db.query("SELECT id FROM teachers WHERE user_id = $1", [req.user.id]);
+        if (!teacher) return res.status(404).json({ error: 'Teacher not found.' });
+
+        const { rows } = await db.query(
+            `SELECT ar.*, u.full_name as approved_by_name
+             FROM advance_requests ar
+             LEFT JOIN users u ON ar.approved_by = u.id
+             WHERE ar.teacher_id = $1
+             ORDER BY ar.created_at DESC`,
+            [teacher.id]
+        );
+        res.json(rows);
+    } catch (err) { res.status(500).json({ error: 'Failed to fetch advance requests.' }); }
+});
+
+// POST /api/teacher/advances
+router.post('/advances', async (req, res) => {
+    try {
+        const amount = Number(req.body.amount);
+        const reason = (req.body.reason || '').trim();
+
+        if (!Number.isFinite(amount) || amount <= 0) {
+            return res.status(400).json({ error: 'A valid advance amount is required.' });
+        }
+        if (!reason) {
+            return res.status(400).json({ error: 'Reason is required.' });
+        }
+
+        const db = getDb();
+        const { rows: [teacher] } = await db.query("SELECT id FROM teachers WHERE user_id = $1", [req.user.id]);
+        if (!teacher) return res.status(404).json({ error: 'Teacher not found.' });
+
+        const { rows: [activeReq] } = await db.query(
+            "SELECT id FROM advance_requests WHERE teacher_id = $1 AND status IN ('Pending','Approved') LIMIT 1",
+            [teacher.id]
+        );
+        if (activeReq) {
+            return res.status(400).json({ error: 'You already have a pending or approved advance request.' });
+        }
+
+        const { rows: [newAdvance] } = await db.query(
+            `INSERT INTO advance_requests (teacher_id, amount, reason)
+             VALUES ($1, $2, $3) RETURNING id`,
+            [teacher.id, amount, reason]
+        );
+
+        logAudit(db, req.user.id, req.user.username, 'CREATE_ADVANCE_REQUEST', `Submitted advance request: ${amount}`, req.ip);
+        res.status(201).json({ message: 'Advance request submitted successfully.', id: newAdvance.id });
+    } catch (err) { res.status(500).json({ error: 'Failed to submit advance request.' }); }
 });
 
 module.exports = router;

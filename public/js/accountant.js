@@ -197,13 +197,13 @@ async function loadPayrollItems() {
     const payrollId = document.getElementById('payslipPayroll').value;
     const tbody = document.getElementById('payslipItemsBody');
     if (!payrollId) {
-        tbody.innerHTML = '<tr><td colspan="7" class="text-center" style="padding:32px;color:var(--text-light);">Select a payroll period</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" class="text-center" style="padding:32px;color:var(--text-light);">Select a payroll period</td></tr>';
         return;
     }
     try {
         const items = await apiRequest(`/accountant/payroll/${payrollId}/items`);
         if (!items.length) {
-            tbody.innerHTML = '<tr><td colspan="7" class="text-center" style="padding:32px;color:var(--text-light);">No items</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="8" class="text-center" style="padding:32px;color:var(--text-light);">No items</td></tr>';
             return;
         }
         tbody.innerHTML = items.map(i => `
@@ -212,6 +212,7 @@ async function loadPayrollItems() {
         <td>${i.full_name}</td>
         <td>${formatCurrency(i.gross_salary)}</td>
         <td>${formatCurrency(i.total_deductions)}</td>
+        <td>${formatCurrency(i.advance_deduction)}</td>
         <td><strong>${formatCurrency(i.net_salary)}</strong></td>
         <td><span class="badge ${i.payment_status === 'Paid' ? 'badge-success' : 'badge-warning'}">${i.payment_status}</span></td>
         <td><button class="btn btn-sm btn-primary" onclick="downloadPayslip(${i.id})">📄 PDF</button></td>
@@ -232,19 +233,20 @@ async function loadPaymentItems() {
     const payrollId = document.getElementById('paymentPayroll').value;
     const tbody = document.getElementById('paymentItemsBody');
     if (!payrollId) {
-        tbody.innerHTML = '<tr><td colspan="5" class="text-center" style="padding:32px;color:var(--text-light);">Select a payroll period</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="6" class="text-center" style="padding:32px;color:var(--text-light);">Select a payroll period</td></tr>';
         return;
     }
     try {
         const items = await apiRequest(`/accountant/payroll/${payrollId}/items`);
         if (!items.length) {
-            tbody.innerHTML = '<tr><td colspan="5" class="text-center" style="padding:32px;color:var(--text-light);">No items</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center" style="padding:32px;color:var(--text-light);">No items</td></tr>';
             return;
         }
         tbody.innerHTML = items.map(i => `
       <tr>
         <td>${i.employee_id}</td>
         <td>${i.full_name}</td>
+      <td>${formatCurrency(i.advance_deduction)}</td>
         <td><strong>${formatCurrency(i.net_salary)}</strong></td>
         <td><span class="badge ${i.payment_status === 'Paid' ? 'badge-success' : 'badge-warning'}">${i.payment_status}</span></td>
         <td>

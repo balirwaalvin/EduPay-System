@@ -8,6 +8,7 @@ document.addEventListener('DOMContentLoaded', () => {
     loadAdmins();
     loadTeachers();
     loadAccountants();
+    loadAdvanceRequests();
     loadSalaryStructures();
     loadConfig();
     loadReports();
@@ -685,6 +686,60 @@ async function updateLeaveStatus(id, status) {
     } catch (err) { showToast(err.message, 'error'); }
 }
 
+// ============ ADVANCE REQUESTS ============
+async function loadAdvanceRequests() {
+    try {
+        const advances = await apiRequest('/admin/advances');
+        const tbody = document.getElementById('advancesTableBody');
+        if (!tbody) return;
+
+        if (!advances.length) {
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center" style="padding:32px;color:var(--text-light);">No advance requests found</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = advances.map(a => {
+            let badgeClass = 'badge-warning';
+            if (a.status === 'Approved') badgeClass = 'badge-success';
+            if (a.status === 'Rejected') badgeClass = 'badge-danger';
+            if (a.status === 'Deducted') badgeClass = 'badge-info';
+
+            let actions = '-';
+            if (a.status === 'Pending') {
+                actions = `
+                <div class="action-btns">
+                    <button class="btn btn-sm btn-success" onclick="updateAdvanceStatus(${a.id}, 'Approved')">Approve</button>
+                    <button class="btn btn-sm btn-danger" onclick="updateAdvanceStatus(${a.id}, 'Rejected')">Reject</button>
+                </div>
+                `;
+            }
+
+            return `
+            <tr>
+                <td><strong>${a.full_name}</strong><br><small style="color:var(--text-secondary);">${a.employee_id}</small></td>
+                <td>${formatDate(a.created_at)}</td>
+                <td><strong>${formatCurrency(a.amount)}</strong></td>
+                <td style="max-width:300px; white-space:normal;">${a.reason || '-'}</td>
+                <td><span class="badge ${badgeClass}">${a.status}</span></td>
+                <td>${actions}</td>
+            </tr>
+            `;
+        }).join('');
+    } catch (err) { showToast('Failed to load advance requests', 'error'); }
+}
+
+async function updateAdvanceStatus(id, status) {
+    if (!confirm(`Are you sure you want to ${status.toLowerCase()} this advance request?`)) return;
+    try {
+        await apiRequest(`/admin/advances/${id}/status`, {
+            method: 'PUT',
+            body: { status }
+        });
+        showToast(`Advance request ${status.toLowerCase()} successfully`);
+        loadAdvanceRequests();
+    } catch (err) { showToast(err.message, 'error'); }
+}
+
 // ============ CONFIGURATION ============
 async function loadConfig() {
     try {
@@ -791,6 +846,7 @@ switchSection = function (sectionId) {
         teachers: 'Teacher Management',
         accountants: 'Accountant Management',
         leave: 'Leave Requests Management',
+        advances: 'Advance Requests Management',
         salary: 'Salary Structure',
         config: 'System Configuration',
         reports: 'Reports & Monitoring',

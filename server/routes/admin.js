@@ -551,5 +551,74 @@ router.put('/leave/:id/status', async (req, res) => {
     } catch (err) { res.status(500).json({ error: 'Failed to update leave request status.' }); }
 });
 
+// ============ ADVANCE REQUESTS ============
+
+// GET /api/admin/advances
+router.get('/advances', async (req, res) => {
+    try {
+        const db = getDb();
+        const { rows } = await db.query(`
+            SELECT ar.*, t.full_name, t.employee_id, u.full_name as approved_by_name
+            FROM advance_requests ar
+            JOIN teachers t ON ar.teacher_id = t.id
+            LEFT JOIN users u ON ar.approved_by = u.id
+            ORDER BY ar.created_at DESC
+        `);
+        res.json(rows);
+    } catch (err) { res.status(500).json({ error: 'Failed to fetch advance requests.' }); }
+});
+
+// PUT /api/admin/advances/:id/status
+router.put('/advances/:id/status', async (req, res) => {
+    try {
+        const { status } = req.body;
+        if (!['Approved', 'Rejected'].includes(status)) {
+            return res.status(400).json({ error: 'Invalid status.' });
+        }
+
+        const db = getDb();
+        const id = parseInt(req.params.id);
+        const { rows: [adv] } = await db.query(
+            'SELECT id, teacher_id, amount, status FROM advance_requests WHERE id = $1',
+            [id]
+        );
+        if (!adv) return res.status(404).json({ error: 'Advance request not found.' });
+        if (adv.status === 'Deducted') return res.status(400).json({ error: 'Advance is already deducted and cannot be updated.' });
+
+        await db.query(
+            `UPDATE advance_requests
+             SET status = $1,
+                 approved_by = CASE WHEN $1='Approved' THEN $2 ELSE NULL END,
+                 approved_at = CASE WHEN $1='Approved' THEN NOW() ELSE NULL END,
+                 updated_at = NOW()
+             WHERE id = $3`,
+            [status, req.user.id, id]
+        );
+
+        if (status === 'Approved') {
+            const { rows: [teacher] } = await db.query('SELECT user_id FROM teachers WHERE id = $1', [adv.teacher_id]);
+            if (teacher && teacher.user_id) {
+                db.query(
+                    "INSERT INTO notifications (user_id, title, message) VALUES ($1, $2, $3)",
+                    [teacher.user_id, 'Advance Request Approved', `Your advance request of ${Number(adv.amount).toLocaleString()} has been approved and will be deducted from your salary.`]
+                ).catch(() => { });
+            }
+        }
+
+        if (status === 'Rejected') {
+            const { rows: [teacher] } = await db.query('SELECT user_id FROM teachers WHERE id = $1', [adv.teacher_id]);
+            if (teacher && teacher.user_id) {
+                db.query(
+                    "INSERT INTO notifications (user_id, title, message) VALUES ($1, $2, $3)",
+                    [teacher.user_id, 'Advance Request Rejected', 'Your advance request has been rejected.']
+                ).catch(() => { });
+            }
+        }
+
+        logAudit(db, req.user.id, req.user.username, 'UPDATE_ADVANCE_STATUS', `Updated advance request ID ${id} to ${status}`, req.ip);
+        res.json({ message: `Advance request ${status.toLowerCase()} successfully.` });
+    } catch (err) { res.status(500).json({ error: 'Failed to update advance request status.' }); }
+});
+
 module.exports = router;
 
