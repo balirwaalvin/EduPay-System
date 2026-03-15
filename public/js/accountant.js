@@ -31,7 +31,7 @@ async function loadTeacherRecords() {
         const teachers = await apiRequest('/accountant/teachers');
         const tbody = document.getElementById('teacherRecordsBody');
         if (!teachers.length) {
-      tbody.innerHTML = '<tr><td colspan="4" class="text-center" style="padding:32px;color:var(--text-light);">No teachers found</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5" class="text-center" style="padding:32px;color:var(--text-light);">No teachers found</td></tr>';
             return;
         }
         tbody.innerHTML = teachers.map(t => {
@@ -59,6 +59,14 @@ async function loadTeacherRecords() {
                 <div class="breakdown-row breakdown-total"><span>Next Payroll Advance</span><span>${formatCurrency(t.next_payroll_advance)}</span></div>
               </div>`;
 
+            const payrollStatus = Number(t.payroll_halted) === 1
+                ? `<span class="badge badge-danger">Halted</span><br><small style="color:var(--text-secondary);">${t.payroll_halt_reason || 'Reason not set'}</small>`
+                : '<span class="badge badge-success">Eligible</span>';
+
+            const haltActionBtn = Number(t.payroll_halted) === 1
+                ? `<button class="btn btn-sm btn-success" onclick="toggleTeacherPayrollHalt(${t.id}, false)">▶ Resume Payroll</button>`
+                : `<button class="btn btn-sm btn-danger" onclick="toggleTeacherPayrollHalt(${t.id}, true)">⏸ Halt Payroll</button>`;
+
             let paymentDetails = '-';
             if (t.payment_method === 'mobile_money') {
                 paymentDetails = `<span class="badge badge-info">📱 Mobile Money</span><br><small>${t.mobile_money_provider || ''}</small><br><small>${t.mobile_money_number || ''}</small>`;
@@ -78,10 +86,16 @@ async function loadTeacherRecords() {
             </a>
           </td>
           <td><strong>${formatCurrency(t.next_payroll_advance)}</strong></td>
-          <td><button class="btn btn-sm btn-secondary" onclick="toggleTeacherDetails('${t.employee_id}')">👁️ View Details</button></td>
+          <td>${payrollStatus}</td>
+          <td>
+            <div class="action-btns">
+              <button class="btn btn-sm btn-secondary" onclick="toggleTeacherDetails('${t.employee_id}')">👁️ View</button>
+              ${haltActionBtn}
+            </div>
+          </td>
         </tr>
         <tr id="details-${t.employee_id}" class="teacher-details-row" style="display: none; background: var(--gray-50);">
-          <td colspan="4" style="padding: 0;">
+          <td colspan="5" style="padding: 0;">
             <div style="padding: 24px; border-bottom: 2px solid var(--gray-200);">
               <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 24px;">
                 <div style="background: var(--white); padding: 16px; border-radius: var(--radius); border: 1px solid var(--gray-200);">
@@ -89,6 +103,8 @@ async function loadTeacherRecords() {
                   <p style="margin-bottom:8px"><strong>Position:</strong> ${t.position || '-'}</p>
                   <p style="margin-bottom:8px"><strong>Scale:</strong> <span class="badge badge-info">${t.salary_scale}</span></p>
                   <p style="margin-bottom:8px"><strong>Basic Salary:</strong> ${formatCurrency(t.basic_salary)}</p>
+                  <p style="margin-bottom:8px"><strong>Payroll Status:</strong> ${Number(t.payroll_halted) === 1 ? 'Halted' : 'Eligible'}</p>
+                  ${Number(t.payroll_halted) === 1 ? `<p style="margin-bottom:8px"><strong>Halt Reason:</strong> ${t.payroll_halt_reason || '-'}</p>` : ''}
                   <p style="margin-bottom:8px"><strong>Payment:</strong> <br><div style="margin-top:6px">${paymentDetails}</div></p>
                 </div>
                 <div style="background: var(--white); padding: 16px; border-radius: var(--radius); border: 1px solid var(--gray-200);">
@@ -114,6 +130,33 @@ window.toggleTeacherDetails = function (empId) {
         detailsRow.style.display = detailsRow.style.display === 'none' ? 'table-row' : 'none';
     }
 };
+
+async function toggleTeacherPayrollHalt(teacherId, shouldHalt) {
+  let reason = '';
+  if (shouldHalt) {
+    reason = prompt('Enter reason for halting this teacher\'s payroll:');
+    if (reason === null) return;
+    reason = reason.trim();
+    if (!reason) {
+      showToast('Reason is required to halt payroll', 'error');
+      return;
+    }
+  }
+
+  const actionText = shouldHalt ? 'halt' : 'resume';
+  if (!confirm(`Are you sure you want to ${actionText} this teacher's payroll?`)) return;
+
+  try {
+    await apiRequest(`/accountant/teachers/${teacherId}/payroll-halt`, {
+      method: 'PUT',
+      body: { halted: shouldHalt, reason }
+    });
+    showToast(shouldHalt ? 'Teacher payroll halted successfully' : 'Teacher payroll resumed successfully');
+    loadTeacherRecords();
+  } catch (err) {
+    showToast(err.message || 'Failed to update payroll halt status', 'error');
+  }
+}
 
 // ============ PAYROLL ============
 let allPayrolls = [];

@@ -16,6 +16,7 @@ router.get('/teachers', async (req, res) => {
         const { rows } = await db.query(`
             SELECT t.*, s.basic_salary, s.housing_allowance, s.transport_allowance, s.medical_allowance,
                    s.other_allowance, s.tax_percentage, s.nssf_percentage, s.loan_deduction, s.other_deduction,
+                   (SELECT full_name FROM users WHERE id = t.payroll_halted_by) as payroll_halted_by_name,
                    COALESCE((
                        SELECT SUM(ar.amount)
                        FROM advance_requests ar
@@ -30,6 +31,50 @@ router.get('/teachers', async (req, res) => {
         `);
         res.json(rows);
     } catch (err) { res.status(500).json({ error: 'Failed to fetch teacher records.' }); }
+});
+
+router.put('/teachers/:id/payroll-halt', async (req, res) => {
+    try {
+        const db = getDb();
+        const teacherId = parseInt(req.params.id, 10);
+        const halted = Boolean(req.body.halted);
+        const reason = (req.body.reason || '').trim();
+
+        if (!Number.isInteger(teacherId)) {
+            return res.status(400).json({ error: 'Invalid teacher ID.' });
+        }
+        if (halted && !reason) {
+            return res.status(400).json({ error: 'Reason is required when halting payroll.' });
+        }
+
+        const { rows: [teacher] } = await db.query("SELECT id, full_name FROM teachers WHERE id = $1", [teacherId]);
+        if (!teacher) return res.status(404).json({ error: 'Teacher not found.' });
+
+        await db.query(
+            `UPDATE teachers
+             SET payroll_halted = $1,
+                 payroll_halt_reason = $2,
+                 payroll_halted_at = CASE WHEN $1 = 1 THEN NOW() ELSE NULL END,
+                 payroll_halted_by = CASE WHEN $1 = 1 THEN $3::integer ELSE NULL::integer END,
+                 updated_at = NOW()
+             WHERE id = $4`,
+            [halted ? 1 : 0, halted ? reason : null, parseInt(req.user.id, 10), teacherId]
+        );
+
+        logAudit(
+            db,
+            req.user.id,
+            req.user.username,
+            halted ? 'HALT_TEACHER_PAYROLL' : 'RESUME_TEACHER_PAYROLL',
+            `${halted ? 'Halted' : 'Resumed'} payroll for ${teacher.full_name}${halted ? `: ${reason}` : ''}`,
+            req.ip
+        );
+
+        res.json({ message: halted ? 'Teacher payroll halted successfully.' : 'Teacher payroll resumed successfully.' });
+    } catch (err) {
+        console.error('Payroll halt update error:', err);
+        res.status(500).json({ error: 'Failed to update payroll halt status.' });
+    }
 });
 
 // ============ PAYROLL PROCESSING ============
@@ -74,10 +119,10 @@ router.post('/payroll/process', async (req, res) => {
                    s.other_allowance, s.tax_percentage, s.nssf_percentage, s.loan_deduction, s.other_deduction
             FROM teachers t
             LEFT JOIN salary_structures s ON t.salary_scale = s.salary_scale
-            WHERE t.is_active = 1
+            WHERE t.is_active = 1 AND COALESCE(t.payroll_halted, 0) = 0
         `);
         if (!teacherList.length)
-            return res.status(400).json({ error: 'No active teachers found.' });
+            return res.status(400).json({ error: 'No eligible teachers found. All active teachers may be halted.' });
 
         await client.query('BEGIN');
 

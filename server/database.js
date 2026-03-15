@@ -85,6 +85,10 @@ async function createTables() {
       salary_scale TEXT NOT NULL DEFAULT 'Scale_1',
       date_joined TEXT,
       is_active INTEGER DEFAULT 1,
+      payroll_halted INTEGER DEFAULT 0,
+      payroll_halt_reason TEXT,
+      payroll_halted_at TIMESTAMP,
+      payroll_halted_by INTEGER REFERENCES users(id),
       payment_method TEXT DEFAULT 'bank' CHECK(payment_method IN ('bank','mobile_money')),
       bank_name TEXT,
       bank_account_name TEXT,
@@ -101,6 +105,10 @@ async function createTables() {
   for (const col of teacherCols) {
     await pool.query(`ALTER TABLE teachers ADD COLUMN IF NOT EXISTS ${col} TEXT`).catch(() => { });
   }
+  await pool.query("ALTER TABLE teachers ADD COLUMN IF NOT EXISTS payroll_halted INTEGER DEFAULT 0").catch(() => { });
+  await pool.query("ALTER TABLE teachers ADD COLUMN IF NOT EXISTS payroll_halt_reason TEXT").catch(() => { });
+  await pool.query("ALTER TABLE teachers ADD COLUMN IF NOT EXISTS payroll_halted_at TIMESTAMP").catch(() => { });
+  await pool.query("ALTER TABLE teachers ADD COLUMN IF NOT EXISTS payroll_halted_by INTEGER REFERENCES users(id)").catch(() => { });
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS accountants (
