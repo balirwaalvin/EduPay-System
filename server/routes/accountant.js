@@ -179,7 +179,14 @@ router.get('/payroll/:id/items', async (req, res) => {
     try {
         const db = getDb();
         const { rows } = await db.query(`
-            SELECT pi.*, t.full_name, t.employee_id, t.salary_scale
+            SELECT pi.*, t.full_name, t.employee_id, t.salary_scale,
+                   COALESCE((
+                       SELECT SUM(ar.amount)
+                       FROM advance_requests ar
+                       WHERE ar.teacher_id = t.id
+                         AND ar.status = 'Approved'
+                         AND ar.deducted_payroll_id IS NULL
+                   ), 0) AS next_payroll_advance
             FROM payroll_items pi
             JOIN teachers t ON pi.teacher_id = t.id
             WHERE pi.payroll_id = $1

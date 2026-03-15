@@ -211,18 +211,28 @@ async function loadPayrollItems() {
             tbody.innerHTML = '<tr><td colspan="8" class="text-center" style="padding:32px;color:var(--text-light);">No items</td></tr>';
             return;
         }
-        tbody.innerHTML = items.map(i => `
+        tbody.innerHTML = items.map(i => {
+          const currentAdvance = Number(i.advance_deduction) || 0;
+          const nextAdvance = Number(i.next_payroll_advance) || 0;
+          const advanceDisplay = currentAdvance > 0
+            ? formatCurrency(currentAdvance)
+            : (nextAdvance > 0
+              ? `${formatCurrency(nextAdvance)} <small style="color:var(--text-secondary);">(next payroll)</small>`
+              : formatCurrency(0));
+
+          return `
       <tr>
         <td>${i.employee_id}</td>
         <td>${i.full_name}</td>
         <td>${formatCurrency(i.gross_salary)}</td>
         <td>${formatCurrency(i.total_deductions)}</td>
-        <td>${formatCurrency(i.advance_deduction)}</td>
+        <td>${advanceDisplay}</td>
         <td><strong>${formatCurrency(i.net_salary)}</strong></td>
         <td><span class="badge ${i.payment_status === 'Paid' ? 'badge-success' : 'badge-warning'}">${i.payment_status}</span></td>
         <td><button class="btn btn-sm btn-primary" onclick="downloadPayslip(${i.id})">📄 PDF</button></td>
       </tr>
-    `).join('');
+      `;
+        }).join('');
     } catch (err) { showToast('Failed to load payroll items', 'error'); }
 }
 
