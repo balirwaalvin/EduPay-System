@@ -247,6 +247,39 @@ async function createTables() {
     ON advance_requests (deducted_payroll_id)
   `);
 
+  // Backward-compatible migration in case advance_requests existed from an older schema.
+  await pool.query(`ALTER TABLE advance_requests ADD COLUMN IF NOT EXISTS reason TEXT`).catch(() => { });
+  await pool.query(`ALTER TABLE advance_requests ADD COLUMN IF NOT EXISTS approved_by INTEGER REFERENCES users(id)`).catch(() => { });
+  await pool.query(`ALTER TABLE advance_requests ADD COLUMN IF NOT EXISTS approved_at TIMESTAMP`).catch(() => { });
+  await pool.query(`ALTER TABLE advance_requests ADD COLUMN IF NOT EXISTS deducted_payroll_id INTEGER REFERENCES payroll(id)`).catch(() => { });
+  await pool.query(`ALTER TABLE advance_requests ADD COLUMN IF NOT EXISTS deducted_at TIMESTAMP`).catch(() => { });
+  await pool.query(`ALTER TABLE advance_requests ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW()`).catch(() => { });
+
+  // Ensure status constraint supports all states used by the app.
+  await pool.query(`
+    DO $$
+    DECLARE
+      v_conname text;
+    BEGIN
+      SELECT c.conname INTO v_conname
+      FROM pg_constraint c
+      JOIN pg_class t ON t.oid = c.conrelid
+      WHERE t.relname = 'advance_requests'
+        AND c.contype = 'c'
+        AND pg_get_constraintdef(c.oid) ILIKE '%status%';
+
+      IF v_conname IS NOT NULL THEN
+        EXECUTE 'ALTER TABLE advance_requests DROP CONSTRAINT ' || quote_ident(v_conname);
+      END IF;
+
+      ALTER TABLE advance_requests
+      ADD CONSTRAINT advance_requests_status_check
+      CHECK(status IN ('Pending','Approved','Rejected','Deducted'));
+    EXCEPTION WHEN duplicate_object THEN
+      NULL;
+    END $$;
+  `).catch(() => { });
+
   await pool.query(`
     ALTER TABLE payroll_items ADD COLUMN IF NOT EXISTS advance_deduction NUMERIC DEFAULT 0
   `).catch(() => { });

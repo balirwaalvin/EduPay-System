@@ -578,6 +578,9 @@ router.put('/advances/:id/status', async (req, res) => {
 
         const db = getDb();
         const id = parseInt(req.params.id);
+        if (!Number.isInteger(id)) {
+            return res.status(400).json({ error: 'Invalid advance request ID.' });
+        }
         const { rows: [adv] } = await db.query(
             'SELECT id, teacher_id, amount, status FROM advance_requests WHERE id = $1',
             [id]
@@ -588,11 +591,11 @@ router.put('/advances/:id/status', async (req, res) => {
         await db.query(
             `UPDATE advance_requests
              SET status = $1,
-                 approved_by = CASE WHEN $1='Approved' THEN $2 ELSE NULL END,
+                 approved_by = CASE WHEN $1='Approved' THEN $2::integer ELSE NULL::integer END,
                  approved_at = CASE WHEN $1='Approved' THEN NOW() ELSE NULL END,
                  updated_at = NOW()
              WHERE id = $3`,
-            [status, req.user.id, id]
+            [status, parseInt(req.user.id, 10), id]
         );
 
         if (status === 'Approved') {
@@ -617,7 +620,10 @@ router.put('/advances/:id/status', async (req, res) => {
 
         logAudit(db, req.user.id, req.user.username, 'UPDATE_ADVANCE_STATUS', `Updated advance request ID ${id} to ${status}`, req.ip);
         res.json({ message: `Advance request ${status.toLowerCase()} successfully.` });
-    } catch (err) { res.status(500).json({ error: 'Failed to update advance request status.' }); }
+    } catch (err) {
+        console.error('Update advance status error:', err);
+        res.status(500).json({ error: `Failed to update advance request status. ${err.message || ''}`.trim() });
+    }
 });
 
 module.exports = router;
