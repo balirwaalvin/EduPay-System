@@ -1,8 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 const { getDb } = require('../database');
 const { authenticateToken, authorizeRoles, logAudit } = require('../middleware');
+const { sendPasswordSetupEmail } = require('../services/email');
 
 // All admin routes require admin role
 router.use(authenticateToken, authorizeRoles('admin'));
@@ -25,12 +27,29 @@ router.post('/users', async (req, res) => {
         const db = getDb();
         const { rows: ex } = await db.query("SELECT id FROM users WHERE username = $1", [username]);
         if (ex.length) return res.status(409).json({ error: 'Username already exists.' });
-        const hashedPassword = bcrypt.hashSync(password, 10);
+        let hashedPassword = bcrypt.hashSync(password, 10);
+        let tokenHash = null;
+        let expiresAt = null;
+        let setupCompleted = 1;
+        let rawToken = null;
+
+        if (role === 'teacher') {
+            rawToken = crypto.randomBytes(32).toString('hex');
+            tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+            const now = new Date();
+            now.setHours(now.getHours() + 24);
+            expiresAt = now.toISOString();
+            setupCompleted = 0;
+            // Set a random impossible password so they MUST use the link.
+            hashedPassword = bcrypt.hashSync(crypto.randomBytes(16).toString('hex'), 10);
+        }
+
         const { rows: [newUser] } = await db.query(
-            `INSERT INTO users (username, password, role, full_name, email, phone, must_change_password)
-             VALUES ($1,$2,$3,$4,$5,$6,1) RETURNING id`,
-            [username, hashedPassword, role, full_name, email || '', phone || '']
+            `INSERT INTO users (username, password, role, full_name, email, phone, must_change_password, password_setup_token_hash, password_setup_expires_at, password_setup_completed)
+             VALUES ($1,$2,$3,$4,$5,$6,1,$7,$8,$9) RETURNING id`,
+            [username, hashedPassword, role, full_name, email || '', phone || '', tokenHash, expiresAt, setupCompleted]
         );
+
         if (role === 'teacher') {
             const empId = 'TCH' + String(newUser.id).padStart(4, '0');
             await db.query(
@@ -38,6 +57,19 @@ router.post('/users', async (req, res) => {
                  VALUES ($1,$2,$3,$4,$5,'Scale_1')`,
                 [newUser.id, empId, full_name, email || '', phone || '']
             );
+
+            // Send setup email
+            if (email) {
+                // Determine base URL, e.g. from environment or request headers
+                const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
+                const setupLink = `${baseUrl}/setup-password.html?token=${rawToken}`;
+                try {
+                    await sendPasswordSetupEmail({ toEmail: email, fullName: full_name, setupLink });
+                } catch (emailErr) {
+                    console.error('Failed to send setup email:', emailErr);
+                    // We log the error but do not fail the user creation
+                }
+            }
         }
         logAudit(db, req.user.id, req.user.username, 'CREATE_USER', `Created user: ${username} (${role})`, req.ip);
         res.status(201).json({ message: 'User created successfully.', userId: newUser.id });

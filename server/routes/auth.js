@@ -2,8 +2,13 @@ const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 const { getDb } = require('../database');
 const { authenticateToken, logAudit, JWT_SECRET } = require('../middleware');
+
+function hashSetupToken(token) {
+    return crypto.createHash('sha256').update(token).digest('hex');
+}
 
 // POST /api/auth/login
 router.post('/login', async (req, res) => {
@@ -22,6 +27,12 @@ router.post('/login', async (req, res) => {
 
         if (!user.is_active) {
             return res.status(403).json({ error: 'Account is deactivated. Contact admin.' });
+        }
+
+        if (user.role === 'teacher' && Number(user.password_setup_completed) !== 1) {
+            return res.status(403).json({
+                error: 'Password setup is required before first login. Please use the link sent to your email.'
+            });
         }
 
         const validPassword = bcrypt.compareSync(password, user.password);
@@ -51,6 +62,92 @@ router.post('/login', async (req, res) => {
     } catch (err) {
         console.error('Login error:', err);
         res.status(500).json({ error: 'Server error during login.' });
+    }
+});
+
+// POST /api/auth/setup-password/validate
+router.post('/setup-password/validate', async (req, res) => {
+    try {
+        const { token } = req.body;
+        if (!token) return res.status(400).json({ error: 'Setup token is required.' });
+
+        const db = getDb();
+        const tokenHash = hashSetupToken(token);
+        const { rows } = await db.query(
+            `SELECT id, full_name, email, role, password_setup_expires_at, password_setup_completed
+             FROM users
+             WHERE password_setup_token_hash = $1`,
+            [tokenHash]
+        );
+        const user = rows[0];
+
+        if (!user || user.role !== 'teacher') {
+            return res.status(400).json({ error: 'Invalid password setup link.' });
+        }
+        if (Number(user.password_setup_completed) === 1) {
+            return res.status(400).json({ error: 'This password setup link has already been used.' });
+        }
+        if (!user.password_setup_expires_at || new Date(user.password_setup_expires_at) < new Date()) {
+            return res.status(400).json({ error: 'This password setup link has expired. Contact admin for a new link.' });
+        }
+
+        res.json({ valid: true, full_name: user.full_name, email: user.email || '' });
+    } catch (err) {
+        console.error('Validate setup token error:', err);
+        res.status(500).json({ error: 'Server error.' });
+    }
+});
+
+// POST /api/auth/setup-password/complete
+router.post('/setup-password/complete', async (req, res) => {
+    try {
+        const { token, new_password } = req.body;
+        if (!token || !new_password) {
+            return res.status(400).json({ error: 'Setup token and new password are required.' });
+        }
+        if (new_password.length < 6) {
+            return res.status(400).json({ error: 'Password must be at least 6 characters.' });
+        }
+
+        const db = getDb();
+        const tokenHash = hashSetupToken(token);
+        const { rows } = await db.query(
+            `SELECT id, username, role, password_setup_expires_at, password_setup_completed
+             FROM users
+             WHERE password_setup_token_hash = $1`,
+            [tokenHash]
+        );
+        const user = rows[0];
+
+        if (!user || user.role !== 'teacher') {
+            return res.status(400).json({ error: 'Invalid password setup link.' });
+        }
+        if (Number(user.password_setup_completed) === 1) {
+            return res.status(400).json({ error: 'This password setup link has already been used.' });
+        }
+        if (!user.password_setup_expires_at || new Date(user.password_setup_expires_at) < new Date()) {
+            return res.status(400).json({ error: 'This password setup link has expired. Contact admin for a new link.' });
+        }
+
+        const newHash = bcrypt.hashSync(new_password, 10);
+        await db.query(
+            `UPDATE users
+             SET password = $1,
+                 must_change_password = 0,
+                 password_setup_completed = 1,
+                 password_setup_token_hash = NULL,
+                 password_setup_expires_at = NULL,
+                 updated_at = NOW()
+             WHERE id = $2`,
+            [newHash, user.id]
+        );
+
+        logAudit(db, user.id, user.username, 'COMPLETE_PASSWORD_SETUP', 'Completed first-time password setup', req.ip);
+
+        res.json({ message: 'Password set successfully. You can now log in.' });
+    } catch (err) {
+        console.error('Complete setup password error:', err);
+        res.status(500).json({ error: 'Server error.' });
     }
 });
 

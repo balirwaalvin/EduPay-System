@@ -68,10 +68,17 @@ async function createTables() {
       phone TEXT,
       is_active INTEGER DEFAULT 1,
       must_change_password INTEGER DEFAULT 1,
+      password_setup_token_hash TEXT,
+      password_setup_expires_at TIMESTAMP,
+      password_setup_completed INTEGER DEFAULT 1,
       created_at TIMESTAMP DEFAULT NOW(),
       updated_at TIMESTAMP DEFAULT NOW()
     )
   `);
+
+  await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS password_setup_token_hash TEXT").catch(() => { });
+  await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS password_setup_expires_at TIMESTAMP").catch(() => { });
+  await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS password_setup_completed INTEGER DEFAULT 1").catch(() => { });
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS teachers (

@@ -2,6 +2,7 @@
 
 document.addEventListener('DOMContentLoaded', () => {
     if (!requireAuth('admin')) return;
+    startSessionTimeout({ timeoutMs: 15000, warningMs: 5000 });
     initUserDisplay();
     loadDashboard();
     loadUsers();

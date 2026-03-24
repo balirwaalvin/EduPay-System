@@ -2,6 +2,7 @@
 
 document.addEventListener('DOMContentLoaded', () => {
     if (!requireAuth('accountant')) return;
+  startSessionTimeout({ timeoutMs: 15000, warningMs: 5000 });
     initUserDisplay();
     loadAccDashboard();
     loadTeacherRecords();

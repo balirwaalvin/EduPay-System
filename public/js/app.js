@@ -164,6 +164,7 @@ function getMonthName(monthNum) {
 
 // Logout
 function logout() {
+    stopSessionTimeout();
     clearAuth();
     window.location.href = '/';
 }
@@ -188,4 +189,65 @@ function initUserDisplay() {
 
     const roleEls = document.querySelectorAll('.user-role-display');
     roleEls.forEach(el => el.textContent = user.role.charAt(0).toUpperCase() + user.role.slice(1));
+}
+
+// Session timeout management
+let sessionTimeoutId = null;
+let sessionWarningTimeoutId = null;
+let sessionActivityHandler = null;
+
+function clearSessionTimers() {
+    if (sessionTimeoutId) {
+        clearTimeout(sessionTimeoutId);
+        sessionTimeoutId = null;
+    }
+    if (sessionWarningTimeoutId) {
+        clearTimeout(sessionWarningTimeoutId);
+        sessionWarningTimeoutId = null;
+    }
+}
+
+function detachSessionActivityListeners() {
+    if (!sessionActivityHandler) return;
+    ['click', 'keydown', 'input', 'scroll', 'touchstart', 'popstate', 'hashchange'].forEach(eventName => {
+        window.removeEventListener(eventName, sessionActivityHandler);
+    });
+    sessionActivityHandler = null;
+}
+
+function resetSessionTimeout(timeoutMs, warningMs) {
+    if (!getToken()) return;
+
+    clearSessionTimers();
+
+    if (warningMs > 0 && warningMs < timeoutMs) {
+        sessionWarningTimeoutId = setTimeout(() => {
+            const seconds = Math.ceil(warningMs / 1000);
+            showToast(`Session will expire in ${seconds} seconds due to inactivity.`, 'warning');
+        }, timeoutMs - warningMs);
+    }
+
+    sessionTimeoutId = setTimeout(() => {
+        showToast('Session expired due to inactivity. Logging out...', 'warning');
+        setTimeout(() => logout(), 350);
+    }, timeoutMs);
+}
+
+function startSessionTimeout(options = {}) {
+    const timeoutMs = typeof options.timeoutMs === 'number' ? options.timeoutMs : 15 * 60 * 1000;
+    const warningMs = typeof options.warningMs === 'number' ? options.warningMs : 30 * 1000;
+
+    detachSessionActivityListeners();
+
+    sessionActivityHandler = () => resetSessionTimeout(timeoutMs, warningMs);
+    ['click', 'keydown', 'input', 'scroll', 'touchstart', 'popstate', 'hashchange'].forEach(eventName => {
+        window.addEventListener(eventName, sessionActivityHandler, { passive: true });
+    });
+
+    resetSessionTimeout(timeoutMs, warningMs);
+}
+
+function stopSessionTimeout() {
+    detachSessionActivityListeners();
+    clearSessionTimers();
 }
