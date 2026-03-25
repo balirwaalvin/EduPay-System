@@ -68,6 +68,13 @@ async function createTables() {
       phone TEXT,
       is_active INTEGER DEFAULT 1,
       must_change_password INTEGER DEFAULT 1,
+      mfa_enabled INTEGER DEFAULT 1,
+      mfa_method TEXT DEFAULT 'email' CHECK(mfa_method IN ('email','authenticator')),
+      mfa_secret TEXT,
+      mfa_pending_token_hash TEXT,
+      mfa_pending_code_hash TEXT,
+      mfa_pending_expires_at TIMESTAMP,
+      mfa_pending_attempts INTEGER DEFAULT 0,
       password_setup_token_hash TEXT,
       password_setup_expires_at TIMESTAMP,
       password_setup_completed INTEGER DEFAULT 1,
@@ -79,6 +86,20 @@ async function createTables() {
   await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS password_setup_token_hash TEXT").catch(() => { });
   await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS password_setup_expires_at TIMESTAMP").catch(() => { });
   await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS password_setup_completed INTEGER DEFAULT 1").catch(() => { });
+  // Migrate MFA: set existing users to 0 (backward compatible), new users default to 1
+  try {
+    await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_enabled INTEGER DEFAULT 1");
+    // Update all existing users to disable MFA (they were created before MFA, so don't require it)
+    await pool.query("UPDATE users SET mfa_enabled = 0 WHERE mfa_pending_token_hash IS NULL");
+  } catch (e) {
+    console.warn('[DB] MFA migration warning (may be normal on fresh installs):', e.message);
+  }
+  await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_method TEXT DEFAULT 'email'").catch(() => { });
+  await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_secret TEXT").catch(() => { });
+  await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_pending_token_hash TEXT").catch(() => { });
+  await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_pending_code_hash TEXT").catch(() => { });
+  await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_pending_expires_at TIMESTAMP").catch(() => { });
+  await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_pending_attempts INTEGER DEFAULT 0").catch(() => { });
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS teachers (
@@ -306,10 +327,13 @@ async function seedDefaults() {
   if (!adminRows.length) {
     const hashedPassword = bcrypt.hashSync('admin123', 10);
     await pool.query(
-      `INSERT INTO users (username, password, role, full_name, email, must_change_password)
-       VALUES ($1, $2, 'admin', 'System Administrator', 'admin@edupay.com', 0)`,
+      `INSERT INTO users (username, password, role, full_name, email, must_change_password, mfa_enabled)
+       VALUES ($1, $2, 'admin', 'System Administrator', 'admin@edupay.com', 0, 0)`,
       ['admin', hashedPassword]
     );
+  } else {
+    // Ensure existing admin has MFA disabled for backward compatibility
+    await pool.query("UPDATE users SET mfa_enabled = 0 WHERE username = 'admin'");
   }
 
   // Seed default salary structures

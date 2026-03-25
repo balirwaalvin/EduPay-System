@@ -15,6 +15,7 @@ A full-stack payroll management system for schools, built with Node.js, Express,
 - Excel & PDF report export
 - Notification system
 - Audit logging
+- Multi-Factor Authentication (MFA) at login (email OTP by default; authenticator app supported when configured)
 - Database backup & restore
 - Role-based access control with JWT authentication
 
@@ -58,6 +59,8 @@ Open **http://localhost:3000** in your browser.
 | Role | Username | Password |
 |------|----------|----------|
 | Admin | `admin` | `admin123` |
+
+After entering valid credentials, users must complete MFA verification before dashboard access is granted.
 
 > **Note:** When you add teachers via the Admin panel, they automatically get a login account with a default password of `teacher123`. Teachers should change this after first login.
 

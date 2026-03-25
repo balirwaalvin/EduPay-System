@@ -25,6 +25,7 @@
         "express": "^4.18.2",
         "jsonwebtoken": "^9.0.2",
         "nodemailer": "^6.10.1",
+        "otplib": "^12.0.1",
         "pdfkit": "^0.13.0",
         "pg": "^8.19.0"
     }

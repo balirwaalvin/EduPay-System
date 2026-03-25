@@ -68,6 +68,7 @@
       </div>
       
       <div id="loginError" class="login-error"></div>
+      <div id="mfaInfo" class="login-error" style="display:none;background:rgba(16,185,129,.14);border-color:rgba(16,185,129,.3);color:#9ff3ca;"></div>
       
       <form id="loginForm" class="login-form" autocomplete="off">
         <div class="form-group">
@@ -80,6 +81,16 @@
         </div>
         <button type="submit" id="loginBtn" class="login-btn">Sign In</button>
       </form>
+
+      <form id="mfaForm" class="login-form" autocomplete="off" style="display:none;">
+        <div class="form-group">
+          <label for="otpCode">Verification Code</label>
+          <input type="text" id="otpCode" inputmode="numeric" maxlength="6" placeholder="Enter 6-digit code" required>
+        </div>
+        <button type="submit" id="verifyBtn" class="login-btn">Verify & Continue</button>
+        <button type="button" id="resendBtn" class="login-btn" style="margin-top:10px;background:transparent;border:1px solid rgba(255,255,255,.3);">Resend Code</button>
+        <button type="button" id="backToLoginBtn" class="login-btn" style="margin-top:10px;background:transparent;border:1px solid rgba(255,255,255,.2);">Back to Sign In</button>
+      </form>
     </div>
   </div>
 
@@ -91,11 +102,38 @@
       redirectToDashboard(existingUser.role);
     }
 
-    document.getElementById('loginForm').addEventListener('submit', async (e) => {
+    const loginForm = document.getElementById('loginForm');
+    const mfaForm = document.getElementById('mfaForm');
+    const mfaInfoEl = document.getElementById('mfaInfo');
+    const errorEl = document.getElementById('loginError');
+    const loginBtn = document.getElementById('loginBtn');
+    const verifyBtn = document.getElementById('verifyBtn');
+    const resendBtn = document.getElementById('resendBtn');
+    const backToLoginBtn = document.getElementById('backToLoginBtn');
+
+    let pendingMfa = null;
+
+    function resetToLogin(message = '') {
+      pendingMfa = null;
+      mfaForm.style.display = 'none';
+      loginForm.style.display = 'block';
+      document.getElementById('password').value = '';
+      document.getElementById('otpCode').value = '';
+      mfaInfoEl.style.display = 'none';
+      if (message) {
+        errorEl.textContent = message;
+        errorEl.style.display = 'block';
+      }
+      loginBtn.classList.remove('loading');
+      loginBtn.textContent = 'Sign In';
+      verifyBtn.classList.remove('loading');
+      verifyBtn.textContent = 'Verify & Continue';
+    }
+
+    loginForm.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const btn = document.getElementById('loginBtn');
-      const errorEl = document.getElementById('loginError');
       errorEl.style.display = 'none';
+      mfaInfoEl.style.display = 'none';
 
       const username = document.getElementById('username').value.trim();
       const password = document.getElementById('password').value;
@@ -106,8 +144,8 @@
         return;
       }
 
-      btn.classList.add('loading');
-      btn.innerHTML = '<span class="spinner"></span> Signing in...';
+      loginBtn.classList.add('loading');
+      loginBtn.innerHTML = '<span class="spinner"></span> Signing in...';
 
       try {
         const data = await apiRequest('/auth/login', {
@@ -115,15 +153,109 @@
           body: { username, password }
         });
 
+        if (data.mfa_required) {
+          pendingMfa = {
+            username,
+            token: data.mfa_token,
+            method: data.mfa_method
+          };
+          loginForm.style.display = 'none';
+          mfaForm.style.display = 'block';
+          const destination = data.destination_hint ? ` (${data.destination_hint})` : '';
+          mfaInfoEl.textContent = data.message || `Enter your verification code${destination}.`;
+          mfaInfoEl.style.display = 'block';
+          document.getElementById('otpCode').focus();
+          loginBtn.classList.remove('loading');
+          loginBtn.textContent = 'Sign In';
+          return;
+        }
+
         setToken(data.token);
         setUser(data.user);
         redirectToDashboard(data.user.role);
       } catch (err) {
         errorEl.textContent = err.message || 'Login failed. Please try again.';
         errorEl.style.display = 'block';
-        btn.classList.remove('loading');
-        btn.textContent = 'Sign In';
+        loginBtn.classList.remove('loading');
+        loginBtn.textContent = 'Sign In';
       }
+    });
+
+    mfaForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      errorEl.style.display = 'none';
+
+      if (!pendingMfa) {
+        resetToLogin('MFA session expired. Please sign in again.');
+        return;
+      }
+
+      const otp = document.getElementById('otpCode').value.trim();
+      if (!otp) {
+        errorEl.textContent = 'Enter your verification code.';
+        errorEl.style.display = 'block';
+        return;
+      }
+
+      verifyBtn.classList.add('loading');
+      verifyBtn.innerHTML = '<span class="spinner"></span> Verifying...';
+
+      try {
+        const data = await apiRequest('/auth/verify-mfa', {
+          method: 'POST',
+          body: {
+            username: pendingMfa.username,
+            mfa_token: pendingMfa.token,
+            otp
+          }
+        });
+
+        setToken(data.token);
+        setUser(data.user);
+        redirectToDashboard(data.user.role);
+      } catch (err) {
+        errorEl.textContent = err.message || 'Verification failed. Please try again.';
+        errorEl.style.display = 'block';
+        verifyBtn.classList.remove('loading');
+        verifyBtn.textContent = 'Verify & Continue';
+      }
+    });
+
+    resendBtn.addEventListener('click', async () => {
+      errorEl.style.display = 'none';
+      if (!pendingMfa) {
+        resetToLogin('MFA session expired. Please sign in again.');
+        return;
+      }
+      if (pendingMfa.method !== 'email') {
+        errorEl.textContent = 'Resend is only available for email MFA.';
+        errorEl.style.display = 'block';
+        return;
+      }
+
+      resendBtn.disabled = true;
+      resendBtn.textContent = 'Sending...';
+      try {
+        const data = await apiRequest('/auth/resend-mfa', {
+          method: 'POST',
+          body: {
+            username: pendingMfa.username,
+            mfa_token: pendingMfa.token
+          }
+        });
+        mfaInfoEl.textContent = data.message || 'A new code has been sent.';
+        mfaInfoEl.style.display = 'block';
+      } catch (err) {
+        errorEl.textContent = err.message || 'Unable to resend code.';
+        errorEl.style.display = 'block';
+      } finally {
+        resendBtn.disabled = false;
+        resendBtn.textContent = 'Resend Code';
+      }
+    });
+
+    backToLoginBtn.addEventListener('click', () => {
+      resetToLogin();
     });
 
     function redirectToDashboard(role) {

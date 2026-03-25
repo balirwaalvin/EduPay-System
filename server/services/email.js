@@ -48,4 +48,27 @@ async function sendPasswordSetupEmail({ toEmail, fullName, setupLink }) {
     });
 }
 
-module.exports = { sendPasswordSetupEmail };
+async function sendMfaOtpEmail({ toEmail, fullName, otpCode, expiryMinutes = 10 }) {
+    const fromAddress = process.env.EMAIL_FROM || process.env.SMTP_USER;
+    const mailer = getTransporter();
+
+    await mailer.sendMail({
+        from: fromAddress,
+        to: toEmail,
+        subject: 'EduPay Login Verification Code',
+        text:
+            `Hello ${fullName},\n\n` +
+            'A login attempt to your EduPay account requires verification.\n' +
+            `Your one-time code is: ${otpCode}\n\n` +
+            `This code expires in ${expiryMinutes} minutes.\n` +
+            'If you did not request this, contact your administrator immediately.\n',
+        html:
+            `<p>Hello ${fullName},</p>` +
+            '<p>A login attempt to your EduPay account requires verification.</p>' +
+            `<p><strong>Your one-time code is: ${otpCode}</strong></p>` +
+            `<p>This code expires in ${expiryMinutes} minutes.</p>` +
+            '<p>If you did not request this, contact your administrator immediately.</p>'
+    });
+}
+
+module.exports = { sendPasswordSetupEmail, sendMfaOtpEmail };

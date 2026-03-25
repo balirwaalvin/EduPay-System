@@ -45,8 +45,8 @@ router.post('/users', async (req, res) => {
         }
 
         const { rows: [newUser] } = await db.query(
-            `INSERT INTO users (username, password, role, full_name, email, phone, must_change_password, password_setup_token_hash, password_setup_expires_at, password_setup_completed)
-             VALUES ($1,$2,$3,$4,$5,$6,1,$7,$8,$9) RETURNING id`,
+            `INSERT INTO users (username, password, role, full_name, email, phone, must_change_password, password_setup_token_hash, password_setup_expires_at, password_setup_completed, mfa_enabled)
+             VALUES ($1,$2,$3,$4,$5,$6,1,$7,$8,$9,1) RETURNING id`,
             [username, hashedPassword, role, full_name, email || '', phone || '', tokenHash, expiresAt, setupCompleted]
         );
 
