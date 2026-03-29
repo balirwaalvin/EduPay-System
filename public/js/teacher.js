@@ -2,7 +2,7 @@
 
 document.addEventListener('DOMContentLoaded', () => {
     if (!requireAuth('teacher')) return;
-    startSessionTimeout({ timeoutMs: 15000, warningMs: 5000 });
+    startSessionTimeout();
     initUserDisplay();
     loadProfile();
     loadPayslips();

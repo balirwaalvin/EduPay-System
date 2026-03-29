@@ -6,6 +6,7 @@ const { initDatabase } = require('./database');
 
 const authRoutes = require('./routes/auth');
 const adminRoutes = require('./routes/admin');
+const hrRoutes = require('./routes/hr');
 const accountantRoutes = require('./routes/accountant');
 const teacherRoutes = require('./routes/teacher');
 
@@ -29,11 +30,13 @@ app.use(express.static(path.join(__dirname, '..', 'public'), {
 // API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/hr', hrRoutes);
 app.use('/api/accountant', accountantRoutes);
 app.use('/api/teacher', teacherRoutes);
 
 // SPA-style fallback — serve HTML files
 app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'admin.html')));
+app.get('/hr', (req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'hr.html')));
 app.get('/accountant', (req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'accountant.html')));
 app.get('/teacher-portal', (req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'teacher.html')));
 

@@ -6,7 +6,6 @@ const crypto = require('crypto');
 const { authenticator } = require('otplib');
 const { getDb } = require('../database');
 const { authenticateToken, logAudit, JWT_SECRET } = require('../middleware');
-const { sendMfaOtpEmail } = require('../services/email');
 
 const MFA_TOKEN_TTL_MINUTES = Number(process.env.MFA_TOKEN_TTL_MINUTES || 10);
 const MFA_MAX_ATTEMPTS = Number(process.env.MFA_MAX_ATTEMPTS || 5);
@@ -46,10 +45,6 @@ async function startMfaChallenge(db, user, req) {
     const preferredMethod = user.mfa_method === 'authenticator' && user.mfa_secret ? 'authenticator' : 'email';
 
     if (preferredMethod === 'email') {
-        if (!user.email) {
-            return { error: 'MFA is required for this account, but no email is configured. Contact admin.' };
-        }
-
         const otpCode = generateMfaOtp();
         const otpCodeHash = hashMfaValue(otpCode);
 
@@ -64,29 +59,21 @@ async function startMfaChallenge(db, user, req) {
             [challengeTokenHash, otpCodeHash, expiresAt, user.id]
         );
 
-        try {
-            await sendMfaOtpEmail({
-                toEmail: user.email,
-                fullName: user.full_name,
-                otpCode,
-                expiryMinutes: MFA_TOKEN_TTL_MINUTES
-            });
-        } catch (emailErr) {
-            console.error('Failed to send MFA OTP email:', emailErr.message);
-            return {
-                error: 'Unable to deliver MFA code by email right now. Please contact admin.'
-            };
-        }
+        // Store plaintext OTP for Admins to view
+        await db.query(
+            `INSERT INTO admin_mfa_codes (user_id, otp_code, expires_at) VALUES ($1, $2, $3)`,
+            [user.id, otpCode, expiresAt]
+        );
 
-        logAudit(db, user.id, user.username, 'MFA_OTP_SENT', 'Email OTP sent for login verification', req.ip);
+        logAudit(db, user.id, user.username, 'MFA_OTP_GENERATED', 'MFA OTP generated and routed to Admin Portal', req.ip);
 
         return {
             mfa_required: true,
             mfa_method: 'email',
             mfa_token: challengeToken,
             expires_in_seconds: MFA_TOKEN_TTL_MINUTES * 60,
-            destination_hint: maskEmail(user.email),
-            message: 'A one-time verification code has been sent to your email.'
+            destination_hint: 'System Admin',
+            message: 'Please contact the System Administrator to receive your 6-digit verification code.'
         };
     }
 
@@ -241,6 +228,9 @@ router.post('/verify-mfa', async (req, res) => {
             [user.id]
         );
 
+        // Delete the used code from Admin view
+        await db.query('DELETE FROM admin_mfa_codes WHERE user_id = $1', [user.id]);
+
         const token = issueAccessToken(user);
 
         logAudit(db, user.id, user.username, 'LOGIN', 'User logged in with MFA', req.ip);
@@ -290,9 +280,6 @@ router.post('/resend-mfa', async (req, res) => {
         if (method !== 'email') {
             return res.status(400).json({ error: 'Resend is available only for email-based MFA.' });
         }
-        if (!user.email) {
-            return res.status(400).json({ error: 'No email is configured for this account.' });
-        }
 
         const otpCode = generateMfaOtp();
         const otpCodeHash = hashMfaValue(otpCode);
@@ -308,19 +295,18 @@ router.post('/resend-mfa', async (req, res) => {
             [otpCodeHash, expiresAt, user.id]
         );
 
-        await sendMfaOtpEmail({
-            toEmail: user.email,
-            fullName: user.full_name,
-            otpCode,
-            expiryMinutes: MFA_TOKEN_TTL_MINUTES
-        });
+        // Store the new code in the admin portal
+        await db.query(
+            `INSERT INTO admin_mfa_codes (user_id, otp_code, expires_at) VALUES ($1, $2, $3)`,
+            [user.id, otpCode, expiresAt]
+        );
 
-        logAudit(db, user.id, user.username, 'MFA_OTP_RESENT', 'Email OTP resent for login verification', req.ip);
+        logAudit(db, user.id, user.username, 'MFA_OTP_RESENT', 'MFA OTP resent and routed to Admin Portal', req.ip);
 
         res.json({
-            message: 'A new verification code has been sent to your email.',
+            message: 'A new verification code has been generated. Please contact the System Administrator.',
             expires_in_seconds: MFA_TOKEN_TTL_MINUTES * 60,
-            destination_hint: maskEmail(user.email)
+            destination_hint: 'System Admin'
         });
     } catch (err) {
         console.error('Resend MFA error:', err);

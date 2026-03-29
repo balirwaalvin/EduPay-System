@@ -33,21 +33,11 @@
                     <div class="nav-item" data-section="admins" onclick="switchSection('admins')">
                         <span class="nav-icon">👑</span> Admin Management
                     </div>
-                    <div class="nav-item" data-section="teachers" onclick="switchSection('teachers')">
-                        <span class="nav-icon">🎓</span> Teacher Management
+                    <div class="nav-item" data-section="hr" onclick="switchSection('hr')">
+                        <span class="nav-icon">🏢</span> HR Management
                     </div>
                     <div class="nav-item" data-section="accountants" onclick="switchSection('accountants')">
                         <span class="nav-icon">🧾</span> Accountant Management
-                    </div>
-                    <div class="nav-item" data-section="leave" onclick="switchSection('leave');loadLeaveRequests();">
-                        <span class="nav-icon">📅</span> Leave Requests
-                    </div>
-                    <div class="nav-item" data-section="advances"
-                        onclick="switchSection('advances');loadAdvanceRequests();">
-                        <span class="nav-icon">💸</span> Advance Requests
-                    </div>
-                    <div class="nav-item" data-section="salary" onclick="switchSection('salary')">
-                        <span class="nav-icon">💰</span> Salary Structure
                     </div>
                 </div>
                 <div class="nav-section">
@@ -60,6 +50,9 @@
                     </div>
                     <div class="nav-item" data-section="audit" onclick="switchSection('audit')">
                         <span class="nav-icon">📋</span> Audit Log
+                    </div>
+                    <div class="nav-item" data-section="mfa" onclick="switchSection('mfa');loadMfaCodes();">
+                        <span class="nav-icon">🔑</span> MFA Portal
                     </div>
                     <div class="nav-item" data-section="security" onclick="switchSection('security')">
                         <span class="nav-icon">🔒</span> Security
@@ -96,9 +89,9 @@
                             <div class="stat-label">Total Users</div>
                         </div>
                         <div class="stat-card">
-                            <div class="stat-icon green">🎓</div>
-                            <div class="stat-value" id="statTeachers">0</div>
-                            <div class="stat-label">Active Teachers</div>
+                            <div class="stat-icon green">🏢</div>
+                            <div class="stat-value" id="statHr">0</div>
+                            <div class="stat-label">Active HR Staff</div>
                         </div>
                         <div class="stat-card">
                             <div class="stat-icon purple">🧾</div>
@@ -127,14 +120,11 @@
                         </div>
                         <div class="card-body" style="display:flex;gap:12px;flex-wrap:wrap;">
                             <button class="btn btn-primary" onclick="switchSection('users')">👥 Manage Users</button>
-                            <button class="btn btn-primary" onclick="switchSection('teachers')">🎓 Manage
-                                Teachers</button>
+                            <button class="btn btn-primary" onclick="switchSection('hr')">🏢 Manage HR</button>
                             <button class="btn btn-primary" onclick="switchSection('accountants')">🧾 Manage
                                 Accountants</button>
                             <button class="btn btn-primary" onclick="switchSection('admins')">👑 Manage
                                 Admins</button>
-                            <button class="btn btn-primary" onclick="switchSection('salary')">💰 Salary
-                                Structure</button>
                             <button class="btn btn-secondary" onclick="switchSection('config')">⚙️ System
                                 Config</button>
                             <button class="btn btn-secondary" onclick="backupDatabase()">💾 Backup Database</button>
@@ -199,6 +189,34 @@
                     </div>
                 </div>
 
+                <!-- HR Management -->
+                <div id="hr" class="page-section">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>HR Management</h3>
+                            <button class="btn btn-primary" onclick="showCreateHrModal()">+ Add HR</button>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>Username</th>
+                                            <th>Full Name</th>
+                                            <th>Email</th>
+                                            <th>Phone</th>
+                                            <th>Date Created</th>
+                                            <th>Status</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="hrTableBody"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Accountant Management -->
                 <div id="accountants" class="page-section">
                     <div class="card">
@@ -223,118 +241,6 @@
                                         </tr>
                                     </thead>
                                     <tbody id="accountantsTableBody"></tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Teacher Management -->
-                <div id="teachers" class="page-section">
-                    <div class="card">
-                        <div class="card-header">
-                            <h3>Teacher Management</h3>
-                            <button class="btn btn-primary" onclick="showCreateTeacherModal()">+ Add Teacher</button>
-                        </div>
-                        <div class="card-body">
-                            <div class="table-responsive">
-                                <table>
-                                    <thead>
-                                        <tr>
-                                            <th>Employee ID</th>
-                                            <th>Full Name</th>
-                                            <th>Position</th>
-                                            <th>Salary Scale</th>
-                                            <th>Phone</th>
-                                            <th>Email</th>
-                                            <th>Payment Details</th>
-                                            <th>Actions</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="teachersTableBody"></tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Leave Requests -->
-                <div id="leave" class="page-section">
-                    <div class="card">
-                        <div class="card-header">
-                            <h3>Leave Requests Management</h3>
-                        </div>
-                        <div class="card-body">
-                            <div class="table-responsive">
-                                <table>
-                                    <thead>
-                                        <tr>
-                                            <th>Teacher</th>
-                                            <th>Type</th>
-                                            <th>Date Range</th>
-                                            <th>Reason</th>
-                                            <th>Status</th>
-                                            <th>Actions</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="leaveTableBody"></tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Advance Requests -->
-                <div id="advances" class="page-section">
-                    <div class="card">
-                        <div class="card-header">
-                            <h3>Advance Requests Management</h3>
-                        </div>
-                        <div class="card-body">
-                            <div class="table-responsive">
-                                <table>
-                                    <thead>
-                                        <tr>
-                                            <th>Teacher</th>
-                                            <th>Requested On</th>
-                                            <th>Amount</th>
-                                            <th>Reason</th>
-                                            <th>Status</th>
-                                            <th>Actions</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="advancesTableBody"></tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Salary Structure -->
-                <div id="salary" class="page-section">
-                    <div class="card">
-                        <div class="card-header">
-                            <h3>Salary Structure Setup</h3>
-                            <button class="btn btn-primary" onclick="showSalaryModal()">+ Add Scale</button>
-                        </div>
-                        <div class="card-body">
-                            <div class="table-responsive">
-                                <table>
-                                    <thead>
-                                        <tr>
-                                            <th>Scale</th>
-                                            <th>Basic Salary</th>
-                                            <th>Housing</th>
-                                            <th>Transport</th>
-                                            <th>Medical</th>
-                                            <th>Other</th>
-                                            <th>Tax %</th>
-                                            <th>NSSF %</th>
-                                            <th>Loan</th>
-                                            <th>Actions</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="salaryTableBody"></tbody>
                                 </table>
                             </div>
                         </div>
@@ -410,6 +316,35 @@
                     </div>
                 </div>
 
+                <!-- MFA Portal -->
+                <div id="mfa" class="page-section">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Active MFA Requests</h3>
+                            <button class="btn btn-primary" onclick="loadMfaCodes()">↻ Refresh</button>
+                        </div>
+                        <div class="card-body">
+                            <p style="color:var(--text-secondary);margin-bottom:16px;">
+                                Provide the 6-digit code below to users currently trying to sign in. Codes expire automatically after 10 minutes.
+                            </p>
+                            <div class="table-responsive">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>Requested At</th>
+                                            <th>User</th>
+                                            <th>Role</th>
+                                            <th>OTP Code</th>
+                                            <th>Expires In</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="mfaTableBody"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Audit Log -->
                 <div id="audit" class="page-section">
                     <div class="card">
@@ -445,7 +380,7 @@
                                 passwords, and control access from the <a href="#"
                                     onclick="switchSection('users');return false;" style="color:var(--primary);">User
                                     Management</a> section. Use the toggle buttons to activate/deactivate accounts and
-                                the reset button to set new passwords.</p>
+                                 the reset button to set new passwords.</p>
                             <div class="card">
                                 <div class="card-header">
                                     <h3>Change Your Password</h3>
@@ -500,7 +435,7 @@
                             <label>Role *</label>
                             <select id="userRole" class="form-control">
                                 <option value="accountant">Accountant</option>
-                                <option value="teacher">Teacher</option>
+                                <option value="hr">HR</option>
                                 <option value="admin">Admin</option>
                             </select>
                         </div>
@@ -567,6 +502,50 @@
         </div>
     </div>
 
+    <!-- Create/Edit HR Modal -->
+    <div id="hrModal" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 id="hrModalTitle">Add New HR</h3>
+                <button class="modal-close" onclick="closeModal('hrModal')">✕</button>
+            </div>
+            <div class="modal-body">
+                <form id="hrForm">
+                    <input type="hidden" id="editHrId">
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label>Full Name *</label>
+                            <input type="text" id="hrFullName" class="form-control" required>
+                        </div>
+                        <div class="form-group" id="hrUsernameGroup">
+                            <label>Username * <span id="hrUsernameHint"
+                                    style="font-size:11px;color:var(--text-secondary);"></span></label>
+                            <input type="text" id="hrUsername" class="form-control" placeholder="e.g. john.hr">
+                        </div>
+                        <div class="form-group">
+                            <label>Email</label>
+                            <input type="email" id="hrEmail" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label>Phone</label>
+                            <input type="text" id="hrPhone" class="form-control">
+                        </div>
+                        <div class="form-group" id="hrPasswordGroup">
+                            <label>Password <span style="font-size:11px;color:var(--text-secondary);">(default:
+                                    hr123)</span></label>
+                            <input type="password" id="hrPassword" class="form-control"
+                                placeholder="Leave blank for default">
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('hrModal')">Cancel</button>
+                <button class="btn btn-primary" onclick="saveHr()">Save HR</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Create/Edit Accountant Modal -->
     <div id="accountantModal" class="modal-overlay">
         <div class="modal">
@@ -611,162 +590,6 @@
             <div class="modal-footer">
                 <button class="btn btn-secondary" onclick="closeModal('accountantModal')">Cancel</button>
                 <button class="btn btn-primary" onclick="saveAccountant()">Save Accountant</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Create/Edit Teacher Modal -->
-    <div id="teacherModal" class="modal-overlay">
-        <div class="modal">
-            <div class="modal-header">
-                <h3 id="teacherModalTitle">Add New Teacher</h3>
-                <button class="modal-close" onclick="closeModal('teacherModal')">✕</button>
-            </div>
-            <div class="modal-body">
-                <form id="teacherForm">
-                    <input type="hidden" id="editTeacherId">
-                    <div class="form-grid">
-                        <div class="form-group">
-                            <label>Full Name *</label>
-                            <input type="text" id="teacherFullName" class="form-control" required>
-                        </div>
-                        <div class="form-group" id="teacherUsernameGroup">
-                            <label>Username <span id="teacherUsernameHint"
-                                    style="font-size:11px;color:var(--text-secondary);"></span></label>
-                            <input type="text" id="teacherUsername" class="form-control"
-                                placeholder="Leave blank to auto-generate">
-                        </div>
-                        <div class="form-group">
-                            <label>Position</label>
-                            <input type="text" id="teacherPosition" class="form-control"
-                                placeholder="e.g. Senior Teacher">
-                        </div>
-                        <div class="form-group">
-                            <label>Salary Scale *</label>
-                            <select id="teacherSalaryScale" class="form-control"></select>
-                        </div>
-                        <div class="form-group">
-                            <label>Email</label>
-                            <input type="email" id="teacherEmail" class="form-control">
-                        </div>
-                        <div class="form-group">
-                            <label>Phone</label>
-                            <input type="text" id="teacherPhone" class="form-control">
-                        </div>
-                        <div class="form-group">
-                            <label>Date Joined</label>
-                            <input type="date" id="teacherDateJoined" class="form-control">
-                        </div>
-                        <div class="form-group" style="grid-column:1/-1;">
-                            <label>Payment Method *</label>
-                            <select id="teacherPaymentMethod" class="form-control"
-                                onchange="toggleTeacherPaymentFields()">
-                                <option value="bank">Bank Account</option>
-                                <option value="mobile_money">Mobile Money Wallet</option>
-                            </select>
-                        </div>
-                    </div>
-                    <!-- Bank Account Fields -->
-                    <div id="teacherBankFields" class="form-grid" style="margin-top:8px;">
-                        <div class="form-group">
-                            <label>Bank Name *</label>
-                            <input type="text" id="teacherBankName" class="form-control"
-                                placeholder="e.g. Stanbic Bank">
-                        </div>
-                        <div class="form-group">
-                            <label>Account Name *</label>
-                            <input type="text" id="teacherBankAccountName" class="form-control"
-                                placeholder="e.g. John Doe">
-                        </div>
-                        <div class="form-group">
-                            <label>Account Number *</label>
-                            <input type="text" id="teacherBankAccountNumber" class="form-control"
-                                placeholder="e.g. 9030012345678">
-                        </div>
-                    </div>
-                    <!-- Mobile Money Fields -->
-                    <div id="teacherMobileFields" class="form-grid" style="margin-top:8px;display:none;">
-                        <div class="form-group">
-                            <label>Mobile Money Provider *</label>
-                            <select id="teacherMobileProvider" class="form-control">
-                                <option value="MTN Mobile Money">MTN Mobile Money</option>
-                                <option value="Airtel Money">Airtel Money</option>
-                                <option value="Africell Money">Africell Money</option>
-                                <option value="Other">Other</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label>Mobile Money Number *</label>
-                            <input type="text" id="teacherMobileNumber" class="form-control"
-                                placeholder="e.g. 0771234567">
-                        </div>
-                    </div>
-                </form>
-            </div>
-            <div class="modal-footer">
-                <button class="btn btn-secondary" onclick="closeModal('teacherModal')">Cancel</button>
-                <button class="btn btn-primary" onclick="saveTeacher()">Save Teacher</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Salary Structure Modal -->
-    <div id="salaryModal" class="modal-overlay">
-        <div class="modal">
-            <div class="modal-header">
-                <h3>Salary Structure</h3>
-                <button class="modal-close" onclick="closeModal('salaryModal')">✕</button>
-            </div>
-            <div class="modal-body">
-                <form id="salaryForm">
-                    <div class="form-grid">
-                        <div class="form-group">
-                            <label>Salary Scale Name *</label>
-                            <input type="text" id="salaryScale" class="form-control" placeholder="e.g. Scale_6"
-                                required>
-                        </div>
-                        <div class="form-group">
-                            <label>Basic Salary *</label>
-                            <input type="number" id="salaryBasic" class="form-control" required>
-                        </div>
-                        <div class="form-group">
-                            <label>Housing Allowance</label>
-                            <input type="number" id="salaryHousing" class="form-control" value="0">
-                        </div>
-                        <div class="form-group">
-                            <label>Transport Allowance</label>
-                            <input type="number" id="salaryTransport" class="form-control" value="0">
-                        </div>
-                        <div class="form-group">
-                            <label>Medical Allowance</label>
-                            <input type="number" id="salaryMedical" class="form-control" value="0">
-                        </div>
-                        <div class="form-group">
-                            <label>Other Allowance</label>
-                            <input type="number" id="salaryOther" class="form-control" value="0">
-                        </div>
-                        <div class="form-group">
-                            <label>Tax Percentage (%)</label>
-                            <input type="number" id="salaryTax" class="form-control" step="0.1" value="0">
-                        </div>
-                        <div class="form-group">
-                            <label>NSSF Percentage (%)</label>
-                            <input type="number" id="salaryNSSF" class="form-control" step="0.1" value="5">
-                        </div>
-                        <div class="form-group">
-                            <label>Loan Deduction</label>
-                            <input type="number" id="salaryLoan" class="form-control" value="0">
-                        </div>
-                        <div class="form-group">
-                            <label>Other Deduction</label>
-                            <input type="number" id="salaryOtherDed" class="form-control" value="0">
-                        </div>
-                    </div>
-                </form>
-            </div>
-            <div class="modal-footer">
-                <button class="btn btn-secondary" onclick="closeModal('salaryModal')">Cancel</button>
-                <button class="btn btn-primary" onclick="saveSalaryStructure()">Save Structure</button>
             </div>
         </div>
     </div>

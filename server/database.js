@@ -62,7 +62,7 @@ async function createTables() {
       id SERIAL PRIMARY KEY,
       username TEXT UNIQUE NOT NULL,
       password TEXT NOT NULL,
-      role TEXT NOT NULL CHECK(role IN ('admin','accountant','teacher')),
+      role TEXT NOT NULL CHECK(role IN ('admin','accountant','teacher','hr')),
       full_name TEXT NOT NULL,
       email TEXT,
       phone TEXT,
@@ -84,6 +84,32 @@ async function createTables() {
   `);
 
   await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS password_setup_token_hash TEXT").catch(() => { });
+
+  // Ensure role constraint supports 'hr'
+  await pool.query(`
+    DO $$
+    DECLARE
+      v_conname text;
+    BEGIN
+      SELECT c.conname INTO v_conname
+      FROM pg_constraint c
+      JOIN pg_class t ON t.oid = c.conrelid
+      WHERE t.relname = 'users'
+        AND c.contype = 'c'
+        AND pg_get_constraintdef(c.oid) ILIKE '%role%';
+
+      IF v_conname IS NOT NULL THEN
+        EXECUTE 'ALTER TABLE users DROP CONSTRAINT ' || quote_ident(v_conname);
+      END IF;
+
+      ALTER TABLE users
+      ADD CONSTRAINT users_role_check
+      CHECK(role IN ('admin','accountant','teacher','hr'));
+    EXCEPTION WHEN duplicate_object THEN
+      NULL;
+    END $$;
+  `).catch(() => { });
+
   await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS password_setup_expires_at TIMESTAMP").catch(() => { });
   await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS password_setup_completed INTEGER DEFAULT 1").catch(() => { });
   // Migrate MFA: set existing users to 0 (backward compatible), new users default to 1
@@ -100,6 +126,16 @@ async function createTables() {
   await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_pending_code_hash TEXT").catch(() => { });
   await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_pending_expires_at TIMESTAMP").catch(() => { });
   await pool.query("ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_pending_attempts INTEGER DEFAULT 0").catch(() => { });
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS admin_mfa_codes (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      otp_code TEXT NOT NULL,
+      expires_at TIMESTAMP NOT NULL,
+      created_at TIMESTAMP DEFAULT NOW()
+    )
+  `);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS teachers (
