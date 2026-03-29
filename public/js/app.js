@@ -141,6 +141,14 @@ function switchSection(sectionId) {
 
     const navItem = document.querySelector(`[data-section="${sectionId}"]`);
     if (navItem) navItem.classList.add('active');
+
+    // Close sidebar on mobile
+    const sidebar = document.querySelector('.sidebar');
+    const overlay = document.querySelector('.sidebar-overlay');
+    if (sidebar && sidebar.classList.contains('open') && window.innerWidth <= 768) {
+        sidebar.classList.remove('open');
+        if (overlay) overlay.classList.remove('open');
+    }
 }
 
 // Format currency
@@ -171,7 +179,24 @@ function logout() {
 
 // Mobile sidebar toggle
 function toggleSidebar() {
-    document.querySelector('.sidebar').classList.toggle('open');
+    const sidebar = document.querySelector('.sidebar');
+    let overlay = document.querySelector('.sidebar-overlay');
+    
+    // Create overlay if it doesn't exist
+    if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.classList.add('sidebar-overlay');
+        document.body.appendChild(overlay);
+        
+        // Close when clicking outside
+        overlay.addEventListener('click', () => {
+            sidebar.classList.remove('open');
+            overlay.classList.remove('open');
+        });
+    }
+
+    sidebar.classList.toggle('open');
+    overlay.classList.toggle('open');
 }
 
 // Initialize user display
