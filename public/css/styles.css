@@ -590,6 +590,7 @@ body {
 .sidebar-header {
   padding: 24px 20px;
   border-bottom: 1px solid var(--dark-3);
+  position: relative;
 }
 
 .sidebar-header h2 {
@@ -1335,6 +1336,27 @@ select.form-control {
   color: var(--text-primary);
 }
 
+.mobile-close-btn {
+  display: none;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: 1.2rem;
+  cursor: pointer;
+  color: var(--gray-400);
+  border-radius: var(--radius);
+  width: 36px;
+  height: 36px;
+  position: absolute;
+  top: 18px;
+  right: 16px;
+  transition: var(--transition);
+}
+
+.mobile-close-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--white);
+}
+
 @media (max-width: 768px) {
   .sidebar {
     transform: translateX(-100%);
@@ -1351,6 +1373,12 @@ select.form-control {
 
   .mobile-menu-btn {
     display: block;
+  }
+
+  .mobile-close-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
 
   .content-area {
