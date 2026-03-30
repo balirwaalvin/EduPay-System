@@ -100,15 +100,42 @@ router.put('/users/:id', async (req, res) => {
 });
 
 router.delete('/users/:id', async (req, res) => {
+    const db = getDb();
+    const client = await db.connect();
     try {
-        const db = getDb();
-        const id = parseInt(req.params.id);
+        const id = parseInt(req.params.id, 10);
+        if (!Number.isInteger(id)) return res.status(400).json({ error: 'Invalid user ID.' });
         if (id === req.user.id) return res.status(400).json({ error: 'Cannot delete your own account.' });
-        await db.query("DELETE FROM teachers WHERE user_id = $1", [id]);
-        await db.query("DELETE FROM users WHERE id = $1", [id]);
+
+        await client.query('BEGIN');
+
+        const { rows: [user] } = await client.query('SELECT id, username, role FROM users WHERE id = $1', [id]);
+        if (!user) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ error: 'User not found.' });
+        }
+
+        await client.query('DELETE FROM notifications WHERE user_id = $1', [id]);
+        await client.query('UPDATE payroll SET processed_by = NULL WHERE processed_by = $1', [id]);
+        await client.query('UPDATE payroll SET approved_by = NULL WHERE approved_by = $1', [id]);
+        await client.query('UPDATE advance_requests SET approved_by = NULL WHERE approved_by = $1', [id]);
+        await client.query('UPDATE teachers SET payroll_halted_by = NULL WHERE payroll_halted_by = $1', [id]);
+        await client.query('UPDATE audit_log SET user_id = NULL WHERE user_id = $1', [id]);
+
+        await client.query('DELETE FROM teachers WHERE user_id = $1', [id]);
+        await client.query('DELETE FROM accountants WHERE user_id = $1', [id]);
+        await client.query('DELETE FROM users WHERE id = $1', [id]);
+
+        await client.query('COMMIT');
         logAudit(db, req.user.id, req.user.username, 'DELETE_USER', `Deleted user ID: ${id}`, req.ip);
         res.json({ message: 'User deleted successfully.' });
-    } catch (err) { res.status(500).json({ error: 'Failed to delete user.' }); }
+    } catch (err) {
+        await client.query('ROLLBACK');
+        console.error('Delete user error:', err);
+        res.status(500).json({ error: 'Failed to delete user.' });
+    } finally {
+        client.release();
+    }
 });
 
 router.post('/users/:id/reset-password', async (req, res) => {

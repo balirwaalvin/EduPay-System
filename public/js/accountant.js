@@ -186,7 +186,7 @@ function renderPayrollHistory() {
       <td><span class="badge ${p.status === 'paid' ? 'badge-success' : p.status === 'approved' ? 'badge-info' : 'badge-warning'}">${p.status}</span></td>
       <td>
         <div class="action-btns">
-          ${p.status === 'processed' ? `<button class="btn btn-sm btn-success" onclick="approvePayroll(${p.id})">✓ Approve</button>` : ''}
+          ${p.status === 'processed' ? `<span class="badge badge-info">Awaiting HR Approval</span>` : ''}
           <button class="btn btn-sm btn-secondary" onclick="viewPayrollDetails(${p.id})">View</button>
         </div>
       </td>
@@ -219,17 +219,7 @@ async function processPayroll() {
             method: 'POST',
             body: { month: parseInt(month), year: parseInt(year) }
         });
-        showToast(`Payroll processed! ${result.teacher_count} teachers, Net: ${formatCurrency(result.total_net)}`);
-        loadPayrollHistory();
-        loadAccDashboard();
-    } catch (err) { showToast(err.message, 'error'); }
-}
-
-async function approvePayroll(id) {
-    if (!confirm('Approve this payroll? This will notify all teachers.')) return;
-    try {
-        await apiRequest(`/accountant/payroll/${id}/approve`, { method: 'POST' });
-        showToast('Payroll approved & teachers notified');
+        showToast(`Payroll processed! ${result.teacher_count} teachers, Net: ${formatCurrency(result.total_net)}. Awaiting HR approval.`);
         loadPayrollHistory();
         loadAccDashboard();
     } catch (err) { showToast(err.message, 'error'); }

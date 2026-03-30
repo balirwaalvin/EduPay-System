@@ -277,6 +277,62 @@ router.put('/advances/:id/status', async (req, res) => {
     }
 });
 
+// ============ PAYROLL APPROVAL ============
+
+router.post('/payroll/:id/approve', async (req, res) => {
+    try {
+        if (req.user.role !== 'hr') {
+            return res.status(403).json({ error: 'Only HR users can approve payroll.' });
+        }
+
+        const db = getDb();
+        const payrollId = parseInt(req.params.id, 10);
+        if (!Number.isInteger(payrollId)) {
+            return res.status(400).json({ error: 'Invalid payroll ID.' });
+        }
+
+        const { rows: [payroll] } = await db.query(
+            'SELECT id, status, month, year FROM payroll WHERE id = $1',
+            [payrollId]
+        );
+        if (!payroll) return res.status(404).json({ error: 'Payroll not found.' });
+        if (payroll.status !== 'processed') {
+            return res.status(400).json({ error: 'Only processed payroll can be approved.' });
+        }
+
+        await db.query(
+            "UPDATE payroll SET status = 'approved', approved_by = $1, updated_at = NOW() WHERE id = $2",
+            [req.user.id, payrollId]
+        );
+
+        const { rows: teacherItems } = await db.query(`
+            SELECT t.user_id, pi.net_salary
+            FROM payroll_items pi
+            JOIN teachers t ON pi.teacher_id = t.id
+            WHERE pi.payroll_id = $1
+        `, [payrollId]);
+
+        for (const item of teacherItems) {
+            if (item.user_id) {
+                db.query(
+                    'INSERT INTO notifications (user_id, title, message) VALUES ($1, $2, $3)',
+                    [
+                        item.user_id,
+                        'Salary Processed',
+                        `Your salary for ${payroll.month}/${payroll.year} has been approved. Net amount: ${Number(item.net_salary).toLocaleString()}`
+                    ]
+                ).catch(err => console.error('Notification insert error:', err));
+            }
+        }
+
+        logAudit(db, req.user.id, req.user.username, 'APPROVE_PAYROLL', `Approved payroll ID: ${payrollId}`, req.ip);
+        res.json({ message: 'Payroll approved successfully.' });
+    } catch (err) {
+        console.error('HR approve payroll error:', err);
+        res.status(500).json({ error: 'Failed to approve payroll.' });
+    }
+});
+
 // ============ REPORTS ============
 
 router.get('/reports/payroll-summary', async (req, res) => {

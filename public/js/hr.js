@@ -409,7 +409,12 @@ async function loadReports() {
             tbody.innerHTML = '<tr><td colspan="6" class="text-center" style="padding:32px;color:var(--text-light);">No payroll records yet</td></tr>';
             return;
         }
-        tbody.innerHTML = reports.map(r => `
+        tbody.innerHTML = reports.map(r => {
+            const actionCell = r.status === 'processed'
+                ? `<button class="btn btn-sm btn-success" onclick="approvePayrollByHr(${r.id})">Approve Payroll</button>`
+                : '<span style="color:var(--text-secondary);">-</span>';
+
+            return `
       <tr>
         <td><strong>${getMonthName(r.month)} ${r.year}</strong></td>
         <td>${r.teacher_count}</td>
@@ -417,9 +422,23 @@ async function loadReports() {
         <td>${formatCurrency(r.total_deductions)}</td>
         <td>${formatCurrency(r.total_net)}</td>
         <td><span class="badge ${r.status === 'paid' ? 'badge-success' : r.status === 'approved' ? 'badge-info' : 'badge-warning'}">${r.status}</span></td>
+        <td>${actionCell}</td>
       </tr>
-    `).join('');
+    `;
+        }).join('');
     } catch (err) { console.error('Reports error:', err); }
+}
+
+async function approvePayrollByHr(payrollId) {
+    if (!confirm('Approve this processed payroll? Teachers will be notified immediately.')) return;
+    try {
+        await apiRequest(`/hr/payroll/${payrollId}/approve`, { method: 'POST' });
+        showToast('Payroll approved successfully');
+        loadReports();
+        loadDashboard();
+    } catch (err) {
+        showToast(err.message, 'error');
+    }
 }
 
 // ============ CHANGE PASSWORD ============

@@ -241,40 +241,6 @@ router.get('/payroll/:id/items', async (req, res) => {
     } catch (err) { res.status(500).json({ error: 'Failed to fetch payroll items.' }); }
 });
 
-router.post('/payroll/:id/approve', async (req, res) => {
-    try {
-        const db = getDb();
-        const { rows: [payroll] } = await db.query("SELECT status, month, year FROM payroll WHERE id = $1", [req.params.id]);
-        if (!payroll) return res.status(404).json({ error: 'Payroll not found.' });
-        if (payroll.status === 'approved') return res.status(400).json({ error: 'Payroll is already approved.' });
-
-        await db.query(
-            "UPDATE payroll SET status='approved', approved_by=$1, updated_at=NOW() WHERE id=$2",
-            [req.user.id, req.params.id]
-        );
-
-        // Notify each teacher
-        const { rows: teacherItems } = await db.query(`
-            SELECT pi.teacher_id, t.user_id, pi.net_salary
-            FROM payroll_items pi JOIN teachers t ON pi.teacher_id = t.id
-            WHERE pi.payroll_id = $1
-        `, [req.params.id]);
-
-        for (const item of teacherItems) {
-            if (item.user_id) {
-                db.query(
-                    "INSERT INTO notifications (user_id, title, message) VALUES ($1,$2,$3)",
-                    [item.user_id, 'Salary Processed',
-                    `Your salary for ${payroll.month}/${payroll.year} has been processed. Net amount: ${Number(item.net_salary).toLocaleString()}`]
-                ).catch(err => console.error('Notification insert error:', err));
-            }
-        }
-
-        logAudit(db, req.user.id, req.user.username, 'APPROVE_PAYROLL', `Approved payroll ID: ${req.params.id}`, req.ip);
-        res.json({ message: 'Payroll approved successfully.' });
-    } catch (err) { res.status(500).json({ error: 'Failed to approve payroll.' }); }
-});
-
 router.put('/payroll-items/:id/payment-status', async (req, res) => {
     try {
         const { payment_status } = req.body;
