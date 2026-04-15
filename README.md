@@ -1,91 +1,130 @@
-# EduPay — School Payroll System
+# EduPay - School Payroll System
 
-A full-stack payroll management system for schools, built with Node.js, Express, and SQLite.
+EduPay is a payroll and workforce management system for schools, built with Node.js, Express, PostgreSQL, and vanilla frontend technologies.
 
 ## Features
 
-### 3 User Roles
-- **Admin** — User & teacher management, salary structure setup, system configuration, audit logs, security control
-- **Accountant** — Process payroll, generate payslips, export reports (PDF/Excel), manage payment status
-- **Teacher** — View profile, payslips, salary history, notifications, change password
+### Role-Based Access
+
+- Admin: User administration, HR/admin/accountant account management, config, audit, backup, MFA portal
+- HR: Teacher management, salary structures, leave and advance approvals, payroll approval
+- Accountant: Payroll processing, payment status updates, report exports, payslip generation
+- Teacher: Profile management, payslips, salary history, leave and advance requests, notifications
 
 ### Key Capabilities
-- Automatic salary calculation (basic + allowances − tax − NSSF − deductions)
+
+- Payroll calculations with allowances and deductions
+- Payroll approval workflow (processed -> approved -> paid)
+- Advance request deduction lifecycle (Pending -> Approved -> Deducted)
+- Teacher payroll halt/resume controls
 - PDF payslip generation
-- Excel & PDF report export
-- Notification system
-- Audit logging
-- Multi-Factor Authentication (MFA) at login (email OTP by default; authenticator app supported when configured)
-- Database backup & restore
-- Role-based access control with JWT authentication
+- PDF/Excel payroll exports
+- JWT authentication with MFA challenge flow
+- In-app notifications and audit logging
+- JSON backup export endpoint
 
 ## Tech Stack
 
 | Layer | Technology |
 |-------|-----------|
 | Backend | Node.js + Express |
-| Database | SQLite (via sql.js) |
-| Auth | JWT + bcrypt |
+| Database | PostgreSQL (pg) |
+| Auth | JWT + bcrypt + otplib |
+| Email | Nodemailer |
 | PDF | PDFKit |
 | Excel | ExcelJS |
 | Frontend | Vanilla HTML/CSS/JS |
 
-## Getting Started
+## Prerequisites
 
-### Prerequisites
-- Node.js v16 or higher
+- Node.js 20+
+- PostgreSQL database
 
-### Installation
+## Setup
 
 ```bash
-# Clone the repository
 git clone https://github.com/balirwaalvin/EduPay-System.git
 cd EduPay-System
-
-# Install dependencies
 npm install
+```
 
-# (Optional) Copy and configure environment variables
-cp .env.example .env
+Create a .env file (or copy from .env.example) and configure at least:
 
-# Start the server
+- DATABASE_URL (or PGHOST/PGPORT/PGDATABASE/PGUSER/PGPASSWORD)
+- JWT_SECRET
+- PORT
+- SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS (for email features)
+
+Start the application:
+
+```bash
 npm start
 ```
 
-Open **http://localhost:3000** in your browser.
+Open http://localhost:3000
 
-### Default Login
+## Default Access
 
-| Role | Username | Password |
-|------|----------|----------|
-| Admin | `admin` | `admin123` |
+Seeded admin account on first startup:
 
-After entering valid credentials, users must complete MFA verification before dashboard access is granted.
+- Username: admin
+- Password: admin123
 
-> **Note:** When you add teachers via the Admin panel, they automatically get a login account with a default password of `teacher123`. Teachers should change this after first login.
+## Main Routes
+
+UI pages:
+
+- / (login)
+- /admin
+- /hr
+- /accountant
+- /teacher-portal
+
+API namespaces:
+
+- /api/auth
+- /api/admin
+- /api/hr
+- /api/accountant
+- /api/teacher
 
 ## Project Structure
 
+```text
+.
+|- public/
+|  |- index.html
+|  |- admin.html
+|  |- hr.html
+|  |- accountant.html
+|  |- teacher.html
+|  |- css/styles.css
+|  `- js/
+|     |- app.js
+|     |- admin.js
+|     |- hr.js
+|     |- accountant.js
+|     `- teacher.js
+|- server/
+|  |- server.js
+|  |- database.js
+|  |- middleware.js
+|  |- services/email.js
+|  `- routes/
+|     |- auth.js
+|     |- admin.js
+|     |- hr.js
+|     |- accountant.js
+|     `- teacher.js
+|- .do/app.yaml
+|- .env.example
+|- package.json
+`- TECHNICAL_DOCUMENTATION.md
 ```
-├── server/
-│   ├── server.js           # Express entry point
-│   ├── database.js         # SQLite schema & seeding
-│   ├── middleware.js        # JWT auth & role middleware
-│   └── routes/
-│       ├── auth.js          # Login & password change
-│       ├── admin.js         # Admin API endpoints
-│       ├── accountant.js    # Accountant API endpoints
-│       └── teacher.js       # Teacher API endpoints
-├── public/
-│   ├── index.html           # Login page
-│   ├── admin.html           # Admin dashboard
-│   ├── accountant.html      # Accountant dashboard
-│   ├── teacher.html         # Teacher portal
-│   ├── css/styles.css       # Design system
-│   └── js/                  # Frontend logic
-├── data/                    # SQLite database (auto-created, gitignored)
-└── package.json
-```
+
+## Documentation
+
+Full implementation-level technical documentation is available in TECHNICAL_DOCUMENTATION.md.
 
 ## License
 

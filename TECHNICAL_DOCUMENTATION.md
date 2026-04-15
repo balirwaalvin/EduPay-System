@@ -1,403 +1,585 @@
-# EduPay System — Technical Documentation
+# EduPay System - Technical Documentation
 
-**Version:** 1.0.0  
-**Stack:** Node.js · Express · PostgreSQL  
-**Deployed on:** DigitalOcean App Platform  
-**Repository:** https://github.com/balirwaalvin/EduPay-System
+Version: 2.0 (implementation-aligned)
+Last updated: 2026-04-15
+Runtime: Node.js + Express + PostgreSQL
 
----
+## 1. Executive Summary
 
-## Table of Contents
+EduPay is a monolithic school payroll and staff management platform with role-based access for:
 
-1. [System Overview](#1-system-overview)
-2. [Architecture](#2-architecture)
-3. [Project Structure](#3-project-structure)
-4. [Technology Stack](#4-technology-stack)
-5. [Database Schema](#5-database-schema)
-6. [Authentication & Authorization](#6-authentication--authorization)
-7. [API Reference](#7-api-reference)
-   - [Auth Routes](#71-auth-routes)
-   - [Admin Routes](#72-admin-routes)
-   - [Accountant Routes](#73-accountant-routes)
-   - [Teacher Routes](#74-teacher-routes)
-8. [Payroll Processing Logic](#8-payroll-processing-logic)
-9. [Salary Structures & Calculations](#9-salary-structures--calculations)
-10. [Report Generation](#10-report-generation)
-11. [Notification System](#11-notification-system)
-12. [Audit Logging](#12-audit-logging)
-13. [Frontend Pages](#13-frontend-pages)
-14. [Environment Variables](#14-environment-variables)
-15. [Deployment — DigitalOcean App Platform](#15-deployment--digitalocean-app-platform)
-16. [Default Seed Data](#16-default-seed-data)
-17. [Security Considerations](#17-security-considerations)
+- `admin`
+- `hr`
+- `accountant`
+- `teacher`
 
----
+The application serves a static multi-page frontend from the same Express process that provides REST APIs.
 
-## 1. System Overview
+Primary capabilities:
 
-EduPay is a web-based school payroll management system. It provides role-based access for three types of users: **Admin**, **Accountant**, and **Teacher**.
+- Authentication with JWT and MFA challenge flow
+- User lifecycle management for all roles
+- Teacher payroll processing and approval workflow
+- Leave and salary advance request workflow
+- PDF/Excel report generation
+- In-app notifications and audit logging
 
-| Role | Primary Responsibilities |
-|---|---|
-| Admin | Manage users, teachers, accountants, salary structures, system configuration |
-| Accountant | Process & approve payroll, export reports (Excel/PDF), generate payslips |
-| Teacher | View personal profile, salary breakdown, payslip history |
+## 2. Current Architecture
 
----
-
-## 2. Architecture
-
-```
-Browser (HTML/CSS/JS)
-        │
-        │  HTTP / REST JSON
-        ▼
-Express.js Web Server (Node.js)
-        │
-        ├── Static file server  →  public/
-        ├── /api/auth           →  server/routes/auth.js
-        ├── /api/admin          →  server/routes/admin.js
-        ├── /api/accountant     →  server/routes/accountant.js
-        └── /api/teacher        →  server/routes/teacher.js
-                │
-                ▼
-        server/middleware.js (JWT verification, role enforcement, audit logging)
-                │
-                ▼
-        server/database.js (pg Pool, table creation, seeding)
-                │
-                ▼
-        PostgreSQL (DigitalOcean Managed Database)
+```text
+Browser (public/*.html + public/js/*.js)
+  -> /api/* (JSON over HTTP)
+Express server (server/server.js)
+  -> Middleware (JWT + RBAC + audit helper)
+  -> Route modules (auth, admin, hr, accountant, teacher)
+  -> PostgreSQL via pg Pool (server/database.js)
 ```
 
-The system is a **monolithic Node.js application**: the same Express process serves both the static frontend files and the REST API. There is no build step — the frontend is plain HTML, CSS, and vanilla JavaScript.
+Routing and page entry points:
 
----
+- `/` -> `public/index.html`
+- `/admin` -> `public/admin.html`
+- `/hr` -> `public/hr.html`
+- `/accountant` -> `public/accountant.html`
+- `/teacher-portal` -> `public/teacher.html`
 
-## 3. Project Structure
+API namespaces:
 
-```
-EduPay System/
-├── .do/
-│   └── app.yaml              # DigitalOcean App Platform deployment spec
-├── public/                   # Frontend (static files served by Express)
-│   ├── index.html            # Login page
-│   ├── admin.html            # Admin dashboard
-│   ├── accountant.html       # Accountant dashboard
-│   ├── teacher.html          # Teacher portal
-│   ├── favicon.svg           # Brand favicon (red/dark EP monogram)
-│   ├── css/
-│   │   └── styles.css        # Global stylesheet (CSS variables, all components)
-│   └── js/
-│       ├── app.js            # Shared utilities (auth, API helpers, notifications)
-│       ├── admin.js          # Admin dashboard logic
-│       ├── accountant.js     # Accountant dashboard logic
-│       └── teacher.js        # Teacher portal logic
-├── server/
-│   ├── server.js             # Express app entry point
-│   ├── database.js           # PostgreSQL pool, table creation, seeding
-│   ├── middleware.js         # JWT auth, role guard, audit log helper
-│   └── routes/
-│       ├── auth.js           # /api/auth — login, change-password
-│       ├── admin.js          # /api/admin — users, teachers, payroll reports, config
-│       ├── accountant.js     # /api/accountant — payroll, exports, payslips
-│       └── teacher.js        # /api/teacher — profile, payslips
-├── .env.example              # Template for local environment variables
-├── .gitignore
-├── package.json
-└── TECHNICAL_DOCUMENTATION.md
-```
+- `/api/auth`
+- `/api/admin`
+- `/api/hr`
+- `/api/accountant`
+- `/api/teacher`
 
----
+## 3. Technology Stack
 
-## 4. Technology Stack
+Runtime and server:
 
-| Layer | Technology | Version |
-|---|---|---|
-| Runtime | Node.js | ≥ 20.0.0 |
-| Web framework | Express | ^4.18.2 |
-| Database | PostgreSQL | 16 (managed) |
-| Database driver | pg (node-postgres) | ^8.19.0 |
-| Authentication | jsonwebtoken | ^9.0.2 |
-| Password hashing | bcryptjs | ^2.4.3 |
-| PDF generation | pdfkit | ^0.13.0 |
-| Excel generation | exceljs | ^4.4.0 |
-| Environment config | dotenv | ^16.6.1 |
-| CORS | cors | ^2.8.5 |
-| Frontend | Vanilla HTML/CSS/JS | — |
-| Hosting | DigitalOcean App Platform | — |
+- Node.js `>=20.0.0`
+- Express `^4.18.2`
+- CORS `^2.8.5`
+- dotenv `^16.6.1`
 
----
+Data layer:
 
-## 5. Database Schema
+- PostgreSQL (DigitalOcean managed in production)
+- pg `^8.19.0`
 
-All tables are created automatically on first startup via `initDatabase()` in `server/database.js`.
+Security and auth:
 
-### `users`
-The single authentication table for all roles.
+- jsonwebtoken `^9.0.2`
+- bcryptjs `^2.4.3`
+- otplib `^12.0.1`
 
-| Column | Type | Notes |
-|---|---|---|
-| id | SERIAL PK | |
-| username | TEXT UNIQUE | Login identifier |
-| password | TEXT | bcrypt hash (cost factor 10) |
-| role | TEXT | `admin`, `accountant`, or `teacher` |
-| full_name | TEXT | |
-| email | TEXT | Optional |
-| phone | TEXT | Optional |
-| is_active | INTEGER | 1 = active, 0 = deactivated |
-| must_change_password | INTEGER | 1 = forces password change on first login |
-| created_at | TIMESTAMP | |
-| updated_at | TIMESTAMP | |
+Document exports:
 
-### `teachers`
-Profile and employment details for teacher employees.
+- pdfkit `^0.13.0`
+- exceljs `^4.4.0`
 
-| Column | Type | Notes |
-|---|---|---|
-| id | SERIAL PK | |
-| user_id | INTEGER FK → users.id | Links to login account |
-| employee_id | TEXT UNIQUE | Auto-generated: `TCH0001`, `TCH0002`, … |
-| full_name | TEXT | |
-| email, phone | TEXT | |
-| position | TEXT | Job title |
-| salary_scale | TEXT | FK to `salary_structures.salary_scale` |
-| date_joined | TEXT | ISO date string |
-| is_active | INTEGER | 1 = active |
-| created_at / updated_at | TIMESTAMP | |
+Email integration:
 
-### `accountants`
-Profile and employment details for accountant employees.
+- nodemailer `^6.10.1`
 
-| Column | Type | Notes |
-|---|---|---|
-| id | SERIAL PK | |
-| user_id | INTEGER FK → users.id | |
-| employee_id | TEXT UNIQUE | Auto-generated: `ACC0001`, `ACC0002`, … |
-| full_name | TEXT | |
-| email, phone | TEXT | |
-| department | TEXT | |
-| date_joined | TEXT | |
-| is_active | INTEGER | |
+Frontend:
 
-### `salary_structures`
-Defines pay scales and component amounts applied during payroll processing.
+- Plain HTML/CSS/JavaScript (no framework, no bundler)
 
-| Column | Type | Notes |
-|---|---|---|
-| id | SERIAL PK | |
-| salary_scale | TEXT | `Scale_1` … `Scale_5` (unique name) |
-| basic_salary | NUMERIC | Base pay in UGX |
-| housing_allowance | NUMERIC | |
-| transport_allowance | NUMERIC | |
-| medical_allowance | NUMERIC | |
-| other_allowance | NUMERIC | |
-| tax_percentage | NUMERIC | PAYE tax applied to basic salary |
-| nssf_percentage | NUMERIC | NSSF contribution (default 5%) |
-| loan_deduction | NUMERIC | Fixed monthly loan deduction |
-| other_deduction | NUMERIC | Any other fixed deduction |
+## 4. Repository Structure
 
-### `payroll`
-One record per pay period (month + year). Acts as the header for payroll runs.
-
-| Column | Type | Notes |
-|---|---|---|
-| id | SERIAL PK | |
-| month | INTEGER | 1–12 |
-| year | INTEGER | e.g. 2026 |
-| status | TEXT | `draft` → `processed` → `approved` → `paid` |
-| total_gross | NUMERIC | Sum of all gross salaries |
-| total_deductions | NUMERIC | |
-| total_net | NUMERIC | |
-| processed_by | INTEGER FK → users.id | |
-| approved_by | INTEGER FK → users.id | |
-
-### `payroll_items`
-One record per teacher per payroll run. Stores the computed salary breakdown.
-
-| Column | Type | Notes |
-|---|---|---|
-| id | SERIAL PK | |
-| payroll_id | INTEGER FK → payroll.id | |
-| teacher_id | INTEGER FK → teachers.id | |
-| basic_salary … other_allowance | NUMERIC | Snapshot of earnings at processing time |
-| gross_salary | NUMERIC | Sum of all earnings |
-| tax_amount | NUMERIC | Computed from `basic_salary × tax_percentage / 100` |
-| nssf_amount | NUMERIC | Computed from `basic_salary × nssf_percentage / 100` |
-| loan_deduction / other_deduction | NUMERIC | Fixed deductions |
-| total_deductions | NUMERIC | `tax + nssf + loan + other` |
-| net_salary | NUMERIC | `gross - total_deductions` |
-| payment_status | TEXT | `Pending` or `Paid` |
-
-### `notifications`
-In-app notifications delivered to individual users.
-
-| Column | Type | Notes |
-|---|---|---|
-| id | SERIAL PK | |
-| user_id | INTEGER FK → users.id | Recipient |
-| title | TEXT | Short heading |
-| message | TEXT | Full notification body |
-| is_read | INTEGER | 0 = unread, 1 = read |
-| created_at | TIMESTAMP | |
-
-### `audit_log`
-Immutable record of all significant system actions.
-
-| Column | Type | Notes |
-|---|---|---|
-| id | SERIAL PK | |
-| user_id | INTEGER FK → users.id | Actor (nullable for system events) |
-| username | TEXT | Denormalised for readability |
-| action | TEXT | e.g. `LOGIN`, `PROCESS_PAYROLL`, `CREATE_USER` |
-| details | TEXT | Human-readable description |
-| ip_address | TEXT | Request origin IP |
-| created_at | TIMESTAMP | |
-
-### `system_config`
-Key-value store for runtime configuration.
-
-| Key | Default Value | Description |
-|---|---|---|
-| payroll_period | `monthly` | |
-| currency | `UGX` | Displayed on payslips |
-| school_name | `EduPay School` | Displayed on payslips and PDF headers |
-| tax_enabled | `true` | |
-| nssf_percentage | `5` | Global NSSF default |
-
----
-
-## 6. Authentication & Authorization
-
-### JWT Token Flow
-
-1. Client sends `POST /api/auth/login` with `{ username, password }`.
-2. Server verifies credentials against `users` table (bcrypt compare).
-3. On success, a JWT is signed with the payload `{ id, username, role, full_name }` and an 8-hour expiry.
-4. Token is returned to the client and stored in `localStorage`.
-5. All subsequent API calls include the header: `Authorization: Bearer <token>`.
-
-### Middleware
-
-**`authenticateToken(req, res, next)`** — defined in `server/middleware.js`:
-- Extracts the Bearer token from the `Authorization` header.
-- Verifies it using `JWT_SECRET`.
-- Attaches the decoded payload to `req.user`.
-- Returns `401` if no token; `403` if invalid or expired.
-
-**`authorizeRoles(...roles)`** — role guard factory:
-- Returns a middleware that checks `req.user.role` against the allowed roles array.
-- Returns `403` if the role is not permitted.
-
-### Route Protection Summary
-
-| Route prefix | Roles allowed |
-|---|---|
-| `/api/auth/*` | Public (no token required) |
-| `/api/admin/*` | `admin` only |
-| `/api/accountant/*` | `accountant`, `admin` |
-| `/api/teacher/*` | `teacher` only |
-
----
-
-## 7. API Reference
-
-All API endpoints return JSON. Error responses always include `{ "error": "message" }`.
-
-### 7.1 Auth Routes
-
-Base path: `/api/auth`
-
-#### `POST /api/auth/login`
-Authenticate a user and receive a JWT.
-
-**Request body:**
-```json
-{ "username": "admin", "password": "admin123" }
+```text
+.
+|- .do/app.yaml                     # DigitalOcean App Platform spec
+|- .env / .env.example              # Environment settings
+|- data/                            # Local data artifacts (if any)
+|- public/
+|  |- index.html                    # Login + MFA UI
+|  |- admin.html                    # Admin dashboard
+|  |- hr.html                       # HR dashboard
+|  |- accountant.html               # Accountant dashboard
+|  |- teacher.html                  # Teacher portal
+|  |- css/styles.css                # Shared styles
+|  |- js/app.js                     # Shared client helpers
+|  |- js/admin.js                   # Admin client logic
+|  |- js/hr.js                      # HR client logic
+|  |- js/accountant.js              # Accountant client logic
+|  `- js/teacher.js                 # Teacher client logic
+|- server/
+|  |- server.js                     # App bootstrap and route mounting
+|  |- database.js                   # DB connection, schema creation, seeding, migrations
+|  |- middleware.js                 # JWT auth, role guards, audit helper
+|  |- services/email.js             # SMTP email sending helpers
+|  `- routes/
+|     |- auth.js
+|     |- admin.js
+|     |- hr.js
+|     |- accountant.js
+|     `- teacher.js
+|- README.md
+`- TECHNICAL_DOCUMENTATION.md
 ```
 
-**Response `200`:**
-```json
-{
-  "token": "<jwt>",
-  "user": {
-    "id": 1,
-    "username": "admin",
-    "role": "admin",
-    "full_name": "System Administrator",
-    "email": "admin@edupay.com",
-    "must_change_password": 0
-  }
-}
+## 5. Configuration and Environment Variables
+
+Required or commonly used variables (from code and `.env.example`):
+
+- `DATABASE_URL`
+- `PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, `PGPASSWORD` (fallback if `DATABASE_URL` is absent)
+- `JWT_SECRET`
+- `PORT`
+- `BASE_URL` (used when generating password setup links)
+- `SMTP_HOST`
+- `SMTP_PORT`
+- `SMTP_SECURE`
+- `SMTP_USER`
+- `SMTP_PASS`
+- `EMAIL_FROM`
+- `MFA_TOKEN_TTL_MINUTES` (default: `10`)
+- `MFA_MAX_ATTEMPTS` (default: `5`)
+
+## 6. Authentication, MFA, and Authorization
+
+### 6.1 JWT
+
+- Access tokens include: `id`, `username`, `role`, `full_name`
+- Access token TTL: `8h`
+- Header format: `Authorization: Bearer <token>`
+
+### 6.2 Login Flow
+
+`POST /api/auth/login` behavior:
+
+1. Validates username/password.
+2. Rejects inactive accounts.
+3. For teachers with incomplete initial password setup, blocks login.
+4. If MFA disabled for user, returns JWT directly.
+5. If MFA enabled, returns MFA challenge payload.
+
+### 6.3 MFA Flow
+
+Challenge endpoints:
+
+- `POST /api/auth/verify-mfa`
+- `POST /api/auth/resend-mfa`
+
+Stored challenge state (users table):
+
+- `mfa_pending_token_hash`
+- `mfa_pending_code_hash`
+- `mfa_pending_expires_at`
+- `mfa_pending_attempts`
+
+Method selection rules:
+
+- Uses authenticator app only when `mfa_method='authenticator'` and `mfa_secret` exists.
+- Otherwise uses email OTP flow.
+
+Important implementation detail:
+
+- Email-based MFA OTPs are inserted into `admin_mfa_codes` for retrieval in admin MFA portal.
+
+### 6.4 RBAC Matrix
+
+- `/api/auth/*`: public or token-required depending on route
+- `/api/admin/*`: `admin`
+- `/api/hr/*`: `hr`, `admin`
+- `/api/accountant/*`: `accountant`, `admin`
+- `/api/teacher/*`: `teacher`
+
+## 7. Data Model (PostgreSQL)
+
+Schema is created and incrementally migrated by `initDatabase()` in `server/database.js`.
+
+### 7.1 Core Tables
+
+- `users`
+  - Auth principal for all roles
+  - Includes MFA, account status, first-time password setup state
+  - Role constraint supports: `admin`, `accountant`, `teacher`, `hr`
+
+- `teachers`
+  - Teacher employment and payment profile
+  - Includes payroll halt state (`payroll_halted`, reason, actor, timestamp)
+  - Includes payment method fields for bank/mobile money
+
+- `accountants`
+  - Accountant profile linked to `users`
+
+- `salary_structures`
+  - Salary scale keyed by `salary_scale`
+  - Stores allowances and deductions percentages/amounts
+
+- `payroll`
+  - Payroll run header per month/year
+  - Status lifecycle: `draft`, `processed`, `approved`, `paid`
+
+- `payroll_items`
+  - Per-teacher payroll computation snapshot
+  - Includes `advance_deduction`
+  - Payment status: `Paid` or `Pending`
+
+### 7.2 Workflow and Support Tables
+
+- `leave_requests`
+  - Status: `Pending`, `Approved`, `Rejected`
+
+- `advance_requests`
+  - Status: `Pending`, `Approved`, `Rejected`, `Deducted`
+  - Tracks `approved_by`, `approved_at`, `deducted_payroll_id`, `deducted_at`
+
+- `notifications`
+  - In-app notifications per user
+
+- `audit_log`
+  - System action trail
+
+- `system_config`
+  - Runtime key-value config (school name, currency, etc.)
+
+- `admin_mfa_codes`
+  - Temporary OTP visibility for admin MFA portal
+
+### 7.3 Seeded Defaults
+
+- Default admin user:
+  - username: `admin`
+  - password: `admin123`
+  - role: `admin`
+  - MFA disabled for backward compatibility
+
+- Salary scales `Scale_1` to `Scale_5`
+- System config keys:
+  - `payroll_period`
+  - `currency`
+  - `school_name`
+  - `tax_enabled`
+  - `nssf_percentage`
+
+## 8. Payroll and Financial Logic
+
+### 8.1 Payroll Calculation Formula
+
+For each eligible teacher:
+
+- `gross = basic + housing + transport + medical + other_allowance`
+- `tax_amount = basic * tax_percentage / 100`
+- `nssf_amount = basic * nssf_percentage / 100`
+- `advance_deduction = sum(approved, not-yet-deducted advances)`
+- `total_deductions = tax + nssf + loan + advance + other_deduction`
+- `net = gross - total_deductions`
+
+### 8.2 Eligibility
+
+Teacher is included in processing when:
+
+- `teachers.is_active = 1`
+- `teachers.payroll_halted != 1`
+
+### 8.3 Reprocessing Rule
+
+When processing payroll for a month/year that already has a non-final run:
+
+- Existing deducted advances for that run are reverted to `Approved`
+- Existing payroll items are deleted
+- Existing payroll header is deleted
+- New processed payroll is generated
+
+Finalized payroll (`approved` or `paid`) cannot be reprocessed.
+
+### 8.4 Status Transitions
+
+Payroll:
+
+- `processed` (accountant)
+- `approved` (hr only)
+- `paid` (when all payroll_items are marked `Paid`)
+
+Advance request:
+
+- `Pending` -> `Approved` or `Rejected`
+- `Approved` -> `Deducted` when payroll consumes advance
+
+## 9. API Reference
+
+All responses are JSON except file download endpoints.
+Errors return at least `{ "error": "..." }`.
+
+### 9.1 Auth API (`/api/auth`)
+
+- `POST /login`
+- `POST /verify-mfa`
+- `POST /resend-mfa`
+- `POST /setup-password/validate`
+- `POST /setup-password/complete`
+- `POST /change-password` (token required)
+
+### 9.2 Admin API (`/api/admin`)
+
+User management:
+
+- `GET /users`
+- `POST /users`
+- `PUT /users/:id`
+- `DELETE /users/:id`
+- `POST /users/:id/reset-password`
+- `POST /users/:id/toggle-status`
+
+HR management:
+
+- `GET /hr`
+- `POST /hr`
+- `PUT /hr/:id`
+- `DELETE /hr/:id`
+
+Accountant management:
+
+- `GET /accountants`
+- `POST /accountants`
+- `PUT /accountants/:id`
+- `DELETE /accountants/:id`
+
+Admin management:
+
+- `GET /admins`
+- `POST /admins`
+- `PUT /admins/:id`
+- `DELETE /admins/:id`
+
+System and visibility:
+
+- `GET /config`
+- `PUT /config`
+- `GET /audit-log`
+- `GET /reports/payroll-summary`
+- `GET /backup`
+- `GET /stats`
+- `GET /mfa-codes`
+
+### 9.3 HR API (`/api/hr`)
+
+Teacher lifecycle:
+
+- `GET /teachers`
+- `POST /teachers`
+- `PUT /teachers/:id`
+- `DELETE /teachers/:id`
+
+Salary structures:
+
+- `GET /salary-structures`
+- `POST /salary-structures`
+- `DELETE /salary-structures/:id`
+
+Leave and advances:
+
+- `GET /leave`
+- `PUT /leave/:id/status`
+- `GET /advances`
+- `PUT /advances/:id/status`
+
+Payroll approval and reporting:
+
+- `POST /payroll/:id/approve`
+- `GET /reports/payroll-summary`
+- `GET /stats`
+
+### 9.4 Accountant API (`/api/accountant`)
+
+Teacher payroll controls:
+
+- `GET /teachers`
+- `PUT /teachers/:id/payroll-halt`
+
+Payroll processing:
+
+- `GET /payroll`
+- `POST /payroll/process`
+- `GET /payroll/:id/items`
+- `PUT /payroll-items/:id/payment-status`
+
+Reports and exports:
+
+- `GET /reports/monthly`
+- `GET /reports/export/excel/:payrollId`
+- `GET /reports/export/pdf/:payrollId`
+
+Payslip and stats:
+
+- `GET /payslip/:payrollItemId/pdf`
+- `GET /stats`
+
+### 9.5 Teacher API (`/api/teacher`)
+
+Profile and salary visibility:
+
+- `GET /profile`
+- `PUT /profile`
+- `GET /payslips`
+- `GET /payslip/:id/pdf`
+- `GET /salary-history`
+
+Notifications:
+
+- `GET /notifications`
+- `PUT /notifications/:id/read`
+- `PUT /notifications/read-all`
+
+Leave and advances:
+
+- `GET /leave`
+- `POST /leave`
+- `GET /advances`
+- `POST /advances`
+
+## 10. Frontend Implementation
+
+### 10.1 Shared Client Module (`public/js/app.js`)
+
+Responsibilities:
+
+- token/user storage in `localStorage`
+  - `edupay_token`
+  - `edupay_user`
+- `apiRequest()` wrapper with auth header injection
+- download handling for PDF/XLSX responses
+- common UI helpers (toast, modal, section switching)
+- session timeout handling (default inactivity timeout: 15 minutes)
+
+### 10.2 Page Modules
+
+- `index.html`
+  - login and MFA challenge UI
+  - redirects by role
+
+- `admin.js`
+  - manages users, admins, HR, accountants
+  - configuration, backup, audit logs, MFA portal
+
+- `hr.js`
+  - teacher management
+  - salary structure management
+  - leave and advance approval
+  - payroll approval
+
+- `accountant.js`
+  - payroll processing and reprocessing
+  - payroll halt/resume for teachers
+  - payment status updates
+  - report export
+
+- `teacher.js`
+  - profile updates including payment destination
+  - payslip/history access
+  - leave and advance submissions
+  - notifications
+
+## 11. Notifications and Audit
+
+Notifications are created automatically for key lifecycle events, including:
+
+- advance approved/rejected
+- payroll approved by HR
+- salary payment marked paid
+
+Audit log events are written via `logAudit()` across role routes for actions such as:
+
+- login
+- user creation/updates/deletion
+- payroll processing/approval
+- request approvals
+
+## 12. Reporting and Export Outputs
+
+Accountant exports:
+
+- Payroll PDF (landscape summary table)
+- Payroll Excel workbook (detail rows and totals)
+- Individual payslip PDF
+
+Teacher export:
+
+- Personal payslip PDF (restricted to own records)
+
+Admin backup export:
+
+- JSON snapshot containing selected tables
+
+## 13. Deployment Notes (DigitalOcean App Platform)
+
+Defined in `.do/app.yaml`:
+
+- Service name: `edupay-system`
+- Runtime: `node-js`
+- Build command: `npm install --production`
+- Run command: `npm start`
+- Health check path: `/`
+- Managed PostgreSQL database (engine `PG`, version `16`)
+
+Operational notes:
+
+- App reads DB credentials from `DATABASE_URL` or PG fallback vars
+- `PORT` is environment-driven
+- For managed Postgres with SSL mode in URL, code strips conflicting URL `sslmode` query params and applies pg SSL config programmatically
+
+## 14. Security Design Notes
+
+Implemented controls:
+
+- bcrypt password hashing
+- JWT-based API protection
+- Role-based route guards
+- MFA challenge flow with expiration and attempt limits
+- account activation/deactivation controls
+- audit trail for sensitive actions
+
+Current risks and hardening opportunities:
+
+- Default JWT fallback secret exists in code; production must always set strong `JWT_SECRET`
+- No documented refresh token strategy (single access token model)
+- No explicit rate-limiting middleware on auth endpoints
+- MFA OTP currently exposed to admins via portal by design; ensure strict admin access controls and monitoring
+
+## 15. Operational Runbook
+
+Local start:
+
+```bash
+npm install
+npm start
 ```
 
-**Error codes:** `400` missing fields · `401` wrong credentials · `403` account deactivated
+Server startup does:
 
----
+1. Initialize DB connection
+2. Create/migrate tables
+3. Seed defaults
+4. Start Express listener
 
-#### `POST /api/auth/change-password`
-🔒 Requires valid JWT (any role).
+Primary troubleshooting checks:
 
-**Request body:**
-```json
-{ "current_password": "old", "new_password": "newpass123" }
-```
+- Verify DB env vars are present in startup logs
+- Confirm SMTP vars when password setup/MFA email features are expected
+- Check `audit_log` and server console for failed route operations
 
-**Response `200`:** `{ "message": "Password changed successfully." }`
+## 16. Known Gaps and Consistency Notes
 
----
+- `README.md` currently references SQLite/sql.js, while actual implementation is PostgreSQL (`pg` and `server/database.js`).
+- Password setup APIs expect a setup page (`/setup-password.html`) link, but that page is not present in current `public/` directory.
+- `sendMfaOtpEmail()` exists in `server/services/email.js`, but current MFA implementation routes OTP visibility through admin MFA portal (`admin_mfa_codes`) rather than direct email sending.
 
-### 7.2 Admin Routes
+## 17. Data and Business Rules Summary
 
-Base path: `/api/admin`  
-🔒 All routes require role `admin`.
+- Teacher usernames and accountant usernames may be auto-generated and deduplicated.
+- Teacher and accountant deletions are designed to cascade to linked user account removal through route logic.
+- User deletion route explicitly clears dependent references (notifications, payroll approver links, advance approver links, audit links) before deletion.
+- Only HR can approve a processed payroll (`POST /api/hr/payroll/:id/approve`).
+- Payroll is automatically marked `paid` when all payroll items in a payroll run are marked `Paid`.
 
-#### User Management
+## 18. Suggested Next Documentation Improvements
 
-| Method | Endpoint | Description |
-|---|---|---|
-| GET | `/users` | List all users (excludes password) |
-| POST | `/users` | Create user; auto-creates teacher/accountant record if role matches |
-| PUT | `/users/:id` | Update name, email, phone, role |
-| DELETE | `/users/:id` | Delete user and linked teacher/accountant record |
-| POST | `/users/:id/reset-password` | Force-reset a user's password (`must_change_password` = 1) |
-| POST | `/users/:id/toggle-status` | Activate or deactivate account |
-
-**POST /users request body:**
-```json
-{
-  "username": "john.doe",
-  "password": "pass123",
-  "role": "teacher",
-  "full_name": "John Doe",
-  "email": "john@school.com",
-  "phone": "+256700000000"
-}
-```
-
----
-
-#### Teacher Management
-
-| Method | Endpoint | Description |
-|---|---|---|
-| GET | `/teachers` | List all teachers with linked account status |
-| POST | `/teachers` | Add teacher; auto-creates user account (default password: `teacher123`) |
-| PUT | `/teachers/:id` | Update teacher and sync user record |
-| DELETE | `/teachers/:id` | Delete teacher and linked user account |
-
-**POST /teachers request body:**
-```json
-{
-  "full_name": "Jane Smith",
-  "email": "jane@school.com",
-  "phone": "+256700000001",
-  "position": "Mathematics Teacher",
-  "salary_scale": "Scale_2",
-  "date_joined": "2025-01-15",
-  "username": "jane.smith"   // optional; auto-generated from full_name if omitted
-}
-```
+- Add sequence diagrams for login/MFA and payroll lifecycle.
+- Add OpenAPI spec (YAML/JSON) generated from current routes.
+- Add explicit examples for each endpoint request/response body and status codes.
+- Add runbooks for database restore and disaster recovery.
 
 **Response includes:** `employee_id`, `username`, `default_password`
 
