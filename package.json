@@ -5,7 +5,9 @@
     "main": "server/server.js",
     "scripts": {
         "start": "node server/server.js",
-        "dev": "node server/server.js"
+        "dev": "node server/server.js",
+        "db:init": "node server/seed-users.js",
+        "db:seed-users": "node server/seed-users.js"
     },
     "engines": {
         "node": ">=20.0.0"

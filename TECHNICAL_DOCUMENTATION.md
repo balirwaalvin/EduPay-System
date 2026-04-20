@@ -240,11 +240,12 @@ Schema is created and incrementally migrated by `initDatabase()` in `server/data
 
 ### 7.3 Seeded Defaults
 
-- Default admin user:
-  - username: `admin`
-  - password: `admin123`
-  - role: `admin`
-  - MFA disabled for backward compatibility
+- Default users:
+  - admin: `admin` / `admin123`
+  - hr: `hr` / `hr123`
+  - accountant: `accountant` / `accountant123`
+  - teacher: `teacher` / `teacher123`
+  - all seeded users are created idempotently by `seedDefaults()` and can be overridden with `SEED_*` environment variables
 
 - Salary scales `Scale_1` to `Scale_5`
 - System config keys:
@@ -253,6 +254,10 @@ Schema is created and incrementally migrated by `initDatabase()` in `server/data
   - `school_name`
   - `tax_enabled`
   - `nssf_percentage`
+
+Operational note:
+
+- To initialize a newly provisioned database and seed users, run `npm run db:init` after updating DB environment variables.
 
 ## 8. Payroll and Financial Logic
 

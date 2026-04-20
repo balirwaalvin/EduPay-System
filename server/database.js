@@ -52,6 +52,87 @@ async function initDatabase() {
   await seedDefaults();
 }
 
+function getDefaultUserSeeds() {
+  return [
+    {
+      username: process.env.SEED_ADMIN_USERNAME || 'admin',
+      password: process.env.SEED_ADMIN_PASSWORD || 'admin123',
+      role: 'admin',
+      full_name: process.env.SEED_ADMIN_FULL_NAME || 'System Administrator',
+      email: process.env.SEED_ADMIN_EMAIL || 'admin@edupay.com',
+      must_change_password: 0,
+      mfa_enabled: 0
+    },
+    {
+      username: process.env.SEED_HR_USERNAME || 'hr',
+      password: process.env.SEED_HR_PASSWORD || 'hr123',
+      role: 'hr',
+      full_name: process.env.SEED_HR_FULL_NAME || 'Default HR Manager',
+      email: process.env.SEED_HR_EMAIL || 'hr@edupay.com',
+      must_change_password: 1,
+      mfa_enabled: 0
+    },
+    {
+      username: process.env.SEED_ACCOUNTANT_USERNAME || 'accountant',
+      password: process.env.SEED_ACCOUNTANT_PASSWORD || 'accountant123',
+      role: 'accountant',
+      full_name: process.env.SEED_ACCOUNTANT_FULL_NAME || 'Default Accountant',
+      email: process.env.SEED_ACCOUNTANT_EMAIL || 'accountant@edupay.com',
+      must_change_password: 1,
+      mfa_enabled: 0
+    },
+    {
+      username: process.env.SEED_TEACHER_USERNAME || 'teacher',
+      password: process.env.SEED_TEACHER_PASSWORD || 'teacher123',
+      role: 'teacher',
+      full_name: process.env.SEED_TEACHER_FULL_NAME || 'Default Teacher',
+      email: process.env.SEED_TEACHER_EMAIL || 'teacher@edupay.com',
+      must_change_password: 1,
+      mfa_enabled: 0
+    }
+  ];
+}
+
+async function seedDefaultUsers() {
+  const defaultUsers = getDefaultUserSeeds();
+
+  for (const user of defaultUsers) {
+    const { rows } = await pool.query('SELECT id FROM users WHERE username = $1', [user.username]);
+
+    if (!rows.length) {
+      const hashedPassword = bcrypt.hashSync(user.password, 10);
+      await pool.query(
+        `INSERT INTO users (username, password, role, full_name, email, must_change_password, mfa_enabled, password_setup_completed)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, 1)`,
+        [
+          user.username,
+          hashedPassword,
+          user.role,
+          user.full_name,
+          user.email,
+          user.must_change_password,
+          user.mfa_enabled
+        ]
+      );
+      continue;
+    }
+
+    // Keep existing credentials, but enforce key defaults used by startup/login flows.
+    await pool.query(
+      `UPDATE users
+       SET role = $1,
+           full_name = COALESCE(NULLIF(full_name, ''), $2),
+           email = COALESCE(NULLIF(email, ''), $3),
+           is_active = COALESCE(is_active, 1),
+           password_setup_completed = COALESCE(password_setup_completed, 1),
+           mfa_enabled = $4,
+           updated_at = NOW()
+       WHERE username = $5`,
+      [user.role, user.full_name, user.email, user.mfa_enabled, user.username]
+    );
+  }
+}
+
 function getDb() {
   return pool;
 }
@@ -358,19 +439,7 @@ async function createTables() {
 }
 
 async function seedDefaults() {
-  // Seed admin user
-  const { rows: adminRows } = await pool.query("SELECT id FROM users WHERE username = 'admin'");
-  if (!adminRows.length) {
-    const hashedPassword = bcrypt.hashSync('admin123', 10);
-    await pool.query(
-      `INSERT INTO users (username, password, role, full_name, email, must_change_password, mfa_enabled)
-       VALUES ($1, $2, 'admin', 'System Administrator', 'admin@edupay.com', 0, 0)`,
-      ['admin', hashedPassword]
-    );
-  } else {
-    // Ensure existing admin has MFA disabled for backward compatibility
-    await pool.query("UPDATE users SET mfa_enabled = 0 WHERE username = 'admin'");
-  }
+  await seedDefaultUsers();
 
   // Seed default salary structures
   const { rows: scaleRows } = await pool.query("SELECT id FROM salary_structures LIMIT 1");
@@ -407,4 +476,4 @@ async function seedDefaults() {
   }
 }
 
-module.exports = { initDatabase, getDb };
+module.exports = { initDatabase, getDb, seedDefaultUsers };

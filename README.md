@@ -55,6 +55,14 @@ Create a .env file (or copy from .env.example) and configure at least:
 - PORT
 - SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS (for email features)
 
+If you are moving to a new database, update `DATABASE_URL` (or `PGHOST/PGPORT/PGDATABASE/PGUSER/PGPASSWORD`) and run:
+
+```bash
+npm run db:init
+```
+
+This creates/updates schema and seeds default users in an idempotent way.
+
 Start the application:
 
 ```bash
@@ -65,10 +73,12 @@ Open http://localhost:3000
 
 ## Default Access
 
-Seeded admin account on first startup:
+Seeded accounts on first startup (or via `npm run db:init`):
 
-- Username: admin
-- Password: admin123
+- Admin: `admin` / `admin123`
+- HR: `hr` / `hr123`
+- Accountant: `accountant` / `accountant123`
+- Teacher: `teacher` / `teacher123`
 
 ## Main Routes
 
