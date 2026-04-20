@@ -4,6 +4,39 @@ const bcrypt = require('bcryptjs');
 
 // DigitalOcean App Platform injects DATABASE_URL; fall back to individual PG* vars.
 // We strip sslmode from the URL and pass ssl as an object so pg doesn't conflict.
+function normalizeDatabaseUrl(rawValue) {
+  if (!rawValue) return '';
+
+  // Handle accidental quoting/copy-paste whitespace from env config UIs.
+  return String(rawValue).trim().replace(/^['"]+|['"]+$/g, '');
+}
+
+function parseKeyValueDsn(dsn) {
+  // Supports DSN format like: host=... port=... user=... password=... dbname=... sslmode=require
+  const matches = dsn.match(/(\w+)=("[^"]*"|'[^']*'|[^\s]+)/g);
+  if (!matches) return null;
+
+  const parts = {};
+  for (const entry of matches) {
+    const idx = entry.indexOf('=');
+    if (idx === -1) continue;
+    const key = entry.slice(0, idx).toLowerCase();
+    const value = entry.slice(idx + 1).replace(/^['"]+|['"]+$/g, '');
+    parts[key] = value;
+  }
+
+  if (!parts.host || !(parts.user || parts.username)) return null;
+
+  return {
+    host: parts.host,
+    port: Number(parts.port || 25060),
+    database: parts.dbname || parts.database || 'defaultdb',
+    user: parts.user || parts.username,
+    password: parts.password,
+    ssl: String(parts.sslmode || '').toLowerCase() === 'require' ? { rejectUnauthorized: false } : false
+  };
+}
+
 function buildPoolConfig() {
   // Startup diagnostic — logs which DB-related env vars are present (no values)
   const dbVars = Object.keys(process.env).filter(k =>
@@ -11,17 +44,26 @@ function buildPoolConfig() {
   );
   console.log('[DB] Database-related env vars present:', dbVars.length ? dbVars : '(none)');
 
-  const raw = process.env.DATABASE_URL;
+  const raw = normalizeDatabaseUrl(process.env.DATABASE_URL);
 
-  if (raw && raw.startsWith('postgres')) {
+  if (raw && /^postgres(ql)?:\/\//i.test(raw)) {
     // Remove sslmode from the query string so pg won't have a conflicting option
     const connectionString = raw.replace(/[?&]sslmode=[^&]*/g, '').replace(/\?$/, '');
-    const useSSL = raw.includes('sslmode=');
+    const useSSL = /sslmode=require/i.test(raw);
     console.log('[DB] Using DATABASE_URL, ssl:', useSSL);
     return {
       connectionString,
       ssl: useSSL ? { rejectUnauthorized: false } : false
     };
+  }
+
+  if (raw) {
+    const parsedDsn = parseKeyValueDsn(raw);
+    if (parsedDsn) {
+      console.log('[DB] Using DATABASE_URL key-value DSN, host:', parsedDsn.host);
+      return parsedDsn;
+    }
+    console.warn('[DB] DATABASE_URL is present but not in a recognized URL/DSN format; trying fallback vars.');
   }
 
   // Fall back to individual connection variables (also injected by DO App Platform)
