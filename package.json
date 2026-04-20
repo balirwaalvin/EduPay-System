@@ -4,6 +4,7 @@
     "description": "EduPay - School Payroll System",
     "main": "server/server.js",
     "scripts": {
+        "build": "echo No build step required for this app",
         "start": "node server/server.js",
         "dev": "node server/server.js",
         "db:init": "node server/seed-users.js",
