@@ -1,11 +1,7 @@
 const express = require('express');
 const router = express.Router();
 
-const {
-    users, teachers, accountants, payroll, payrollItems, salaryStructures,
-    leaveRequests, advanceRequests, systemConfig, serverTimestamp, docData, docsData,
-    getManyByIds, FieldValue
-} = require('../firebase');
+const db = require('../db');
 const {
     authenticateToken, authorizeRoles, requirePasswordChanged,
     asyncHandler, HttpError, invalidateUserCache, emailLimiter
@@ -14,38 +10,61 @@ const v = require('../services/validate');
 const pw = require('../services/passwords');
 const accounts = require('../services/accounts');
 const configService = require('../services/config');
-const { logAudit, listAudit } = require('../services/audit');
+const { logAudit, listAudit, listActions } = require('../services/audit');
 const notify = require('../services/notifications');
 
 router.use(authenticateToken, authorizeRoles('admin'), requirePasswordChanged);
 
 const ROLES = ['admin', 'hr', 'accountant', 'teacher'];
+const STAFF_ROLES = ['admin', 'hr', 'accountant'];
 
-/** Strip secrets from a user document before it leaves the server. */
-function safeUser(user) {
-    const {
-        password, mfaSecret, mfaPendingCodeHash, mfaPendingTokenHash,
-        passwordSetupTokenHash, ...rest
-    } = user;
-    return {
-        ...rest,
-        isActive: user.isActive !== false,
-        activationPending: user.passwordSetupCompleted === false
-    };
-}
+// Columns safe to return: no password hash, no MFA secret, no token hashes.
+const SAFE_USER_COLUMNS = `
+    id, username, role, full_name, email, phone, is_active,
+    must_change_password, mfa_enabled, mfa_method,
+    (NOT password_setup_completed) AS activation_pending,
+    last_login_at, created_at, updated_at, deactivated_at, deactivation_reason`;
 
 // ===========================================================================
-// Users
+// Accounts
 // ===========================================================================
 
 router.get('/users', asyncHandler(async (req, res) => {
     const role = req.query.role ? v.oneOf(req.query.role, ROLES, 'Role') : null;
 
-    let query = users();
-    if (role) query = query.where('role', '==', role);
+    res.json(await db.query(
+        `SELECT ${SAFE_USER_COLUMNS} FROM users
+          WHERE ($1::text IS NULL OR role = $1)
+          ORDER BY created_at DESC
+          LIMIT 2000`,
+        [role]
+    ));
+}));
 
-    const snap = await query.orderBy('createdAt', 'desc').limit(1000).get();
-    res.json(docsData(snap).map(safeUser));
+router.get('/admins', asyncHandler(async (req, res) => {
+    res.json(await db.query(
+        `SELECT ${SAFE_USER_COLUMNS} FROM users WHERE role = 'admin' ORDER BY created_at DESC`
+    ));
+}));
+
+router.get('/hr', asyncHandler(async (req, res) => {
+    res.json(await db.query(
+        `SELECT ${SAFE_USER_COLUMNS} FROM users WHERE role = 'hr' ORDER BY created_at DESC`
+    ));
+}));
+
+router.get('/accountants', asyncHandler(async (req, res) => {
+    // A single join replaces the batched point reads the document store needed.
+    res.json(await db.query(
+        `SELECT a.id, a.user_id, a.employee_id, a.full_name, a.email, a.phone,
+                a.department, a.date_joined, a.is_active, a.created_at,
+                u.username,
+                u.is_active AS account_active,
+                (NOT u.password_setup_completed) AS activation_pending
+           FROM accountants a
+           JOIN users u ON u.id = a.user_id
+          ORDER BY a.created_at DESC`
+    ));
 }));
 
 /**
@@ -57,42 +76,34 @@ async function createStaff(req, res, role) {
     const usernameValue = v.username(req.body.username);
     const emailAddress = v.email(req.body.email, 'Email', { required: false });
     const phone = v.str(req.body.phone, 'Phone', { required: false, max: 32 });
+    const department = v.str(req.body.department, 'Department', { required: false, max: 80 });
+    const dateJoined = v.isoDate(req.body.dateJoined ?? req.body.date_joined, 'Date joined', { required: false })
+        || new Date().toISOString().slice(0, 10);
 
-    let result;
-    try {
-        result = await accounts.createAccount({
-            username: usernameValue,
-            role,
-            fullName,
-            emailAddress,
-            phone,
-            actor: req.user,
-            req
+    // The account and its profile are created together, so a failure leaves
+    // neither behind.
+    const result = await db.withTransaction(async (client) => {
+        const created = await accounts.createAccount({
+            username: usernameValue, role, fullName, emailAddress, phone,
+            actor: req.user, req, client
         });
-    } catch (err) {
-        if (err.code === 'USERNAME_TAKEN') throw new HttpError(409, err.message, 'USERNAME_TAKEN');
-        throw err;
-    }
 
-    if (role === 'accountant') {
-        const employeeId = await accounts.allocateEmployeeId('accountant');
-        await accountants().add({
-            userId: result.userId,
-            employeeId,
-            fullName,
-            email: emailAddress || '',
-            phone: phone || '',
-            department: v.str(req.body.department, 'Department', { required: false, max: 80 }) || '',
-            dateJoined: v.isoDate(req.body.dateJoined ?? req.body.date_joined, 'Date joined', { required: false })
-                || new Date().toISOString().slice(0, 10),
-            isActive: true,
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp()
-        });
-        result.employeeId = employeeId;
-    }
+        if (role === 'accountant') {
+            const employeeId = await accounts.allocateEmployeeId('accountant', client);
+            await client.query(
+                `INSERT INTO accountants (user_id, employee_id, full_name, email, phone, department, date_joined)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+                [created.userId, employeeId, fullName, emailAddress || null, phone || null,
+                    department || null, dateJoined]
+            );
+            created.employeeId = employeeId;
+        }
 
-    logAudit(req.user, `CREATE_${role.toUpperCase()}`, `Created ${role} account "${usernameValue}" (${fullName})`, req.ip);
+        return created;
+    });
+
+    logAudit(req.user, `CREATE_${role.toUpperCase()}`,
+        `Created ${role} account "${usernameValue}" (${fullName})`, req.ip);
 
     res.status(201).json({
         message: result.activation.method === 'setup_link'
@@ -106,7 +117,7 @@ async function createStaff(req, res, role) {
 }
 
 router.post('/users', asyncHandler(async (req, res) => {
-    const role = v.oneOf(req.body.role, ['admin', 'hr', 'accountant'], 'Role');
+    const role = v.oneOf(req.body.role, STAFF_ROLES, 'Role');
     await createStaff(req, res, role);
 }));
 
@@ -114,90 +125,90 @@ router.post('/admins', asyncHandler((req, res) => createStaff(req, res, 'admin')
 router.post('/hr', asyncHandler((req, res) => createStaff(req, res, 'hr')));
 router.post('/accountants', asyncHandler((req, res) => createStaff(req, res, 'accountant')));
 
-router.get('/admins', asyncHandler(async (req, res) => {
-    const snap = await users().where('role', '==', 'admin').orderBy('createdAt', 'desc').get();
-    res.json(docsData(snap).map(safeUser));
-}));
-
-router.get('/hr', asyncHandler(async (req, res) => {
-    const snap = await users().where('role', '==', 'hr').orderBy('createdAt', 'desc').get();
-    res.json(docsData(snap).map(safeUser));
-}));
-
-router.get('/accountants', asyncHandler(async (req, res) => {
-    const snap = await accountants().orderBy('createdAt', 'desc').get();
-    const rows = docsData(snap);
-    const userMap = await getManyByIds(users(), rows.map(r => r.userId));
-
-    res.json(rows.map(row => {
-        const account = userMap.get(row.userId);
-        return {
-            ...row,
-            username: account?.username || null,
-            accountActive: account ? account.isActive !== false : false,
-            activationPending: account ? account.passwordSetupCompleted === false : false
-        };
-    }));
-}));
-
 /** Shared profile update for any staff account. */
 async function updateStaff(req, res, expectedRole) {
-    const userId = v.docId(req.params.id, 'User id');
-    const existing = docData(await users().doc(userId).get());
+    const userId = v.num(req.params.id, 'User id', { integer: true, min: 1 });
+
+    const existing = await db.queryOne('SELECT id, username, role FROM users WHERE id = $1', [userId]);
     if (!existing) throw new HttpError(404, 'Account not found.', 'USER_NOT_FOUND');
     if (expectedRole && existing.role !== expectedRole) {
         throw new HttpError(400, `That account is not a ${expectedRole} account.`, 'ROLE_MISMATCH');
     }
 
-    const updates = { updatedAt: serverTimestamp() };
-    const fullName = v.str(req.body.fullName ?? req.body.full_name, 'Full name', { required: false, min: 2, max: 120 });
-    const emailAddress = req.body.email !== undefined ? v.email(req.body.email, 'Email', { required: false }) : undefined;
-    const phone = req.body.phone !== undefined ? v.str(req.body.phone, 'Phone', { required: false, max: 32 }) : undefined;
+    const fullName = v.str(req.body.fullName ?? req.body.full_name, 'Full name',
+        { required: false, min: 2, max: 120 });
+    const emailAddress = req.body.email !== undefined
+        ? v.email(req.body.email, 'Email', { required: false }) : undefined;
+    const phone = req.body.phone !== undefined
+        ? v.str(req.body.phone, 'Phone', { required: false, max: 32 }) : undefined;
+    const department = req.body.department !== undefined
+        ? v.str(req.body.department, 'Department', { required: false, max: 80 }) : undefined;
 
-    if (fullName) updates.fullName = fullName;
-    if (emailAddress !== undefined) updates.email = emailAddress || '';
-    if (phone !== undefined) updates.phone = phone || '';
-
-    // A role change rewrites permissions, so existing sessions must be revoked.
+    let newRole = null;
     if (req.body.role && req.body.role !== existing.role) {
-        const newRole = v.oneOf(req.body.role, ROLES, 'Role');
+        newRole = v.oneOf(req.body.role, ROLES, 'Role');
         if (existing.role === 'teacher' || newRole === 'teacher') {
-            throw new HttpError(
-                400,
-                'Teacher accounts cannot be converted to or from another role, because they are tied to a payroll record.',
-                'ROLE_CHANGE_UNSUPPORTED'
+            throw new HttpError(400,
+                'Teacher accounts cannot be converted to or from another role, '
+                + 'because they are tied to a payroll record.',
+                'ROLE_CHANGE_UNSUPPORTED');
+        }
+        if (existing.role === 'admin') {
+            await accounts.assertNotLastAdmin({ ...existing, id: userId }, 'change the role of');
+        }
+    }
+
+    await db.withTransaction(async (client) => {
+        // COALESCE leaves a column untouched when the caller omitted the field.
+        // A role change also bumps token_version, revoking existing sessions.
+        await client.query(
+            `UPDATE users
+                SET full_name = COALESCE($1, full_name),
+                    email     = CASE WHEN $2::boolean THEN $3 ELSE email END,
+                    phone     = CASE WHEN $4::boolean THEN $5 ELSE phone END,
+                    role      = COALESCE($6, role),
+                    token_version = token_version + CASE WHEN $6 IS NULL THEN 0 ELSE 1 END
+              WHERE id = $7`,
+            [
+                fullName || null,
+                emailAddress !== undefined, emailAddress || null,
+                phone !== undefined, phone || null,
+                newRole, userId
+            ]
+        );
+
+        const role = newRole || existing.role;
+
+        if (role === 'teacher') {
+            await client.query(
+                `UPDATE teachers
+                    SET full_name = COALESCE($1, full_name),
+                        email     = CASE WHEN $2::boolean THEN $3 ELSE email END,
+                        phone     = CASE WHEN $4::boolean THEN $5 ELSE phone END
+                  WHERE user_id = $6`,
+                [fullName || null, emailAddress !== undefined, emailAddress || null,
+                    phone !== undefined, phone || null, userId]
+            );
+        } else if (role === 'accountant') {
+            await client.query(
+                `UPDATE accountants
+                    SET full_name  = COALESCE($1, full_name),
+                        email      = CASE WHEN $2::boolean THEN $3 ELSE email END,
+                        phone      = CASE WHEN $4::boolean THEN $5 ELSE phone END,
+                        department = CASE WHEN $6::boolean THEN $7 ELSE department END
+                  WHERE user_id = $8`,
+                [fullName || null, emailAddress !== undefined, emailAddress || null,
+                    phone !== undefined, phone || null,
+                    department !== undefined, department || null, userId]
             );
         }
-        if (existing.role === 'admin') await accountsAssertNotLastAdmin(existing);
-        updates.role = newRole;
-        updates.tokenVersion = FieldValue.increment(1);
-    }
+    });
 
-    await users().doc(userId).update(updates);
     invalidateUserCache(userId);
+    logAudit(req.user, 'UPDATE_USER',
+        `Updated ${existing.role} account "${existing.username}"${newRole ? ` → role ${newRole}` : ''}`, req.ip);
 
-    // Keep the role profile in step with the account.
-    const profile = await accounts.findProfileByUserId(userId, updates.role || existing.role);
-    if (profile) {
-        const profileUpdates = { updatedAt: serverTimestamp() };
-        if (fullName) profileUpdates.fullName = fullName;
-        if (emailAddress !== undefined) profileUpdates.email = emailAddress || '';
-        if (phone !== undefined) profileUpdates.phone = phone || '';
-        if (req.body.department !== undefined) {
-            profileUpdates.department = v.str(req.body.department, 'Department', { required: false, max: 80 }) || '';
-        }
-        await profile.ref.update(profileUpdates);
-    }
-
-    logAudit(req.user, 'UPDATE_USER', `Updated ${existing.role} account "${existing.username}"`, req.ip);
     res.json({ message: 'Account updated.' });
-}
-
-async function accountsAssertNotLastAdmin(user) {
-    const snap = await users().where('role', '==', 'admin').where('isActive', '==', true).count().get();
-    if (snap.data().count <= 1) {
-        throw new HttpError(400, 'This is the only active administrator account, so its role cannot be changed.', 'LAST_ADMIN');
-    }
 }
 
 router.put('/users/:id', asyncHandler((req, res) => updateStaff(req, res, null)));
@@ -205,69 +216,72 @@ router.put('/admins/:id', asyncHandler((req, res) => updateStaff(req, res, 'admi
 router.put('/hr/:id', asyncHandler((req, res) => updateStaff(req, res, 'hr')));
 
 router.put('/accountants/:id', asyncHandler(async (req, res) => {
-    const accountantId = v.docId(req.params.id, 'Accountant id');
-    const profile = docData(await accountants().doc(accountantId).get());
+    const accountantId = v.num(req.params.id, 'Accountant id', { integer: true, min: 1 });
+    const profile = await db.queryOne('SELECT user_id FROM accountants WHERE id = $1', [accountantId]);
     if (!profile) throw new HttpError(404, 'Accountant not found.', 'NOT_FOUND');
 
-    req.params.id = profile.userId;
+    req.params.id = String(profile.userId);
     await updateStaff(req, res, 'accountant');
 }));
 
 // --- Status changes ---------------------------------------------------------
 
 router.post('/users/:id/deactivate', asyncHandler(async (req, res) => {
-    const userId = v.docId(req.params.id, 'User id');
+    const userId = v.num(req.params.id, 'User id', { integer: true, min: 1 });
     const reason = v.str(req.body.reason, 'Reason', { required: false, max: 300 });
 
     const user = await accounts.deactivateAccount({ userId, actor: req.user, reason });
-    invalidateUserCache(userId);
-    logAudit(req.user, 'DEACTIVATE_USER', `Deactivated "${user.username}"${reason ? `: ${reason}` : ''}`, req.ip);
+    logAudit(req.user, 'DEACTIVATE_USER',
+        `Deactivated "${user.username}"${reason ? `: ${reason}` : ''}`, req.ip);
 
-    res.json({ message: `${user.fullName} has been deactivated and signed out of all sessions.`, isActive: false });
+    res.json({
+        message: `${user.fullName} has been deactivated and signed out of all sessions.`,
+        isActive: false
+    });
 }));
 
 router.post('/users/:id/reactivate', asyncHandler(async (req, res) => {
-    const userId = v.docId(req.params.id, 'User id');
+    const userId = v.num(req.params.id, 'User id', { integer: true, min: 1 });
     const user = await accounts.reactivateAccount({ userId, actor: req.user });
-    invalidateUserCache(userId);
     logAudit(req.user, 'REACTIVATE_USER', `Reactivated "${user.username}"`, req.ip);
 
     res.json({ message: `${user.fullName} has been reactivated.`, isActive: true });
 }));
 
-/** Retained for the existing UI control; routes to deactivate/reactivate. */
+/** Retained for the existing UI control; routes to deactivate or reactivate. */
 router.post('/users/:id/toggle-status', asyncHandler(async (req, res) => {
-    const userId = v.docId(req.params.id, 'User id');
-    const existing = docData(await users().doc(userId).get());
+    const userId = v.num(req.params.id, 'User id', { integer: true, min: 1 });
+    const existing = await db.queryOne('SELECT is_active FROM users WHERE id = $1', [userId]);
     if (!existing) throw new HttpError(404, 'Account not found.', 'USER_NOT_FOUND');
 
-    if (existing.isActive === false) {
+    if (!existing.isActive) {
         const user = await accounts.reactivateAccount({ userId, actor: req.user });
-        invalidateUserCache(userId);
         logAudit(req.user, 'REACTIVATE_USER', `Reactivated "${user.username}"`, req.ip);
         return res.json({ message: `${user.fullName} has been reactivated.`, isActive: true });
     }
 
     const user = await accounts.deactivateAccount({ userId, actor: req.user });
-    invalidateUserCache(userId);
     logAudit(req.user, 'DEACTIVATE_USER', `Deactivated "${user.username}"`, req.ip);
     res.json({ message: `${user.fullName} has been deactivated.`, isActive: false });
 }));
 
-async function deleteStaff(req, res, lookup) {
-    const userId = await lookup(req);
+async function deleteStaff(req, res, resolveUserId) {
+    const userId = await resolveUserId(req);
     const user = await accounts.deleteAccount({ userId, actor: req.user });
-    invalidateUserCache(userId);
-    logAudit(req.user, 'DELETE_USER', `Permanently deleted ${user.role} account "${user.username}"`, req.ip);
+    logAudit(req.user, 'DELETE_USER',
+        `Permanently deleted ${user.role} account "${user.username}"`, req.ip);
     res.json({ message: `${user.fullName} has been permanently deleted.` });
 }
 
-router.delete('/users/:id', asyncHandler((req, res) => deleteStaff(req, res, r => v.docId(r.params.id, 'User id'))));
-router.delete('/admins/:id', asyncHandler((req, res) => deleteStaff(req, res, r => v.docId(r.params.id, 'User id'))));
-router.delete('/hr/:id', asyncHandler((req, res) => deleteStaff(req, res, r => v.docId(r.params.id, 'User id'))));
+const userIdFromParam = (req) => v.num(req.params.id, 'User id', { integer: true, min: 1 });
+
+router.delete('/users/:id', asyncHandler((req, res) => deleteStaff(req, res, userIdFromParam)));
+router.delete('/admins/:id', asyncHandler((req, res) => deleteStaff(req, res, userIdFromParam)));
+router.delete('/hr/:id', asyncHandler((req, res) => deleteStaff(req, res, userIdFromParam)));
 
 router.delete('/accountants/:id', asyncHandler((req, res) => deleteStaff(req, res, async (r) => {
-    const profile = docData(await accountants().doc(v.docId(r.params.id, 'Accountant id')).get());
+    const id = v.num(r.params.id, 'Accountant id', { integer: true, min: 1 });
+    const profile = await db.queryOne('SELECT user_id FROM accountants WHERE id = $1', [id]);
     if (!profile) throw new HttpError(404, 'Accountant not found.', 'NOT_FOUND');
     return profile.userId;
 })));
@@ -280,25 +294,27 @@ router.delete('/accountants/:id', asyncHandler((req, res) => deleteStaff(req, re
  * someone else's account.
  */
 router.post('/users/:id/reset-password', asyncHandler(async (req, res) => {
-    const userId = v.docId(req.params.id, 'User id');
-    const user = docData(await users().doc(userId).get());
+    const userId = v.num(req.params.id, 'User id', { integer: true, min: 1 });
+
+    const user = await db.queryOne('SELECT id, username, full_name FROM users WHERE id = $1', [userId]);
     if (!user) throw new HttpError(404, 'Account not found.', 'USER_NOT_FOUND');
 
     const temporaryPassword = pw.generateTemporaryPassword();
 
-    await users().doc(userId).update({
-        password: await pw.hash(temporaryPassword),
-        mustChangePassword: true,
-        passwordSetupCompleted: true,
-        passwordChangedAt: serverTimestamp(),
-        tokenVersion: FieldValue.increment(1),
-        updatedAt: serverTimestamp()
-    });
+    await db.execute(
+        `UPDATE users
+            SET password_hash = $1, must_change_password = TRUE, password_setup_completed = TRUE,
+                password_setup_token_hash = NULL, password_setup_expires_at = NULL,
+                password_changed_at = now(), token_version = token_version + 1
+          WHERE id = $2`,
+        [await pw.hash(temporaryPassword), userId]
+    );
     invalidateUserCache(userId);
 
     await notify.notifyUser(userId, {
         title: 'Your password was reset',
-        message: 'An administrator reset your password. You will be asked to choose a new one when you next sign in.',
+        message: 'An administrator reset your password. You will be asked to choose a new one '
+            + 'when you next sign in.',
         category: notify.CATEGORIES.account,
         severity: 'warning',
         actorId: req.user.id
@@ -314,7 +330,7 @@ router.post('/users/:id/reset-password', asyncHandler(async (req, res) => {
 }));
 
 router.post('/users/:id/resend-setup', emailLimiter, asyncHandler(async (req, res) => {
-    const userId = v.docId(req.params.id, 'User id');
+    const userId = v.num(req.params.id, 'User id', { integer: true, min: 1 });
     const result = await accounts.resendSetupLink({ userId, req });
     logAudit(req.user, 'RESEND_SETUP_LINK', `Resent the setup link for user ${userId}`, req.ip);
     res.json({ message: `A new setup link has been sent to ${result.email}.`, ...result });
@@ -322,27 +338,33 @@ router.post('/users/:id/resend-setup', emailLimiter, asyncHandler(async (req, re
 
 /** Turn two-factor authentication on or off for an account. */
 router.post('/users/:id/mfa', asyncHandler(async (req, res) => {
-    const userId = v.docId(req.params.id, 'User id');
+    const userId = v.num(req.params.id, 'User id', { integer: true, min: 1 });
     const enabled = v.bool(req.body.enabled, true);
 
-    const user = docData(await users().doc(userId).get());
+    const user = await db.queryOne('SELECT id, username, full_name, email FROM users WHERE id = $1', [userId]);
     if (!user) throw new HttpError(404, 'Account not found.', 'USER_NOT_FOUND');
     if (enabled && !user.email) {
-        throw new HttpError(400, 'Add an email address to this account before enabling two-factor authentication.', 'NO_EMAIL');
+        throw new HttpError(400,
+            'Add an email address to this account before enabling two-factor authentication.', 'NO_EMAIL');
     }
 
-    await users().doc(userId).update({
-        mfaEnabled: enabled,
-        mfaPendingTokenHash: FieldValue.delete(),
-        mfaPendingCodeHash: FieldValue.delete(),
-        mfaPendingExpiresAt: FieldValue.delete(),
-        mfaPendingAttempts: FieldValue.delete(),
-        updatedAt: serverTimestamp()
-    });
+    await db.execute(
+        `UPDATE users
+            SET mfa_enabled = $1,
+                mfa_pending_token_hash = NULL, mfa_pending_code_hash = NULL,
+                mfa_pending_expires_at = NULL, mfa_pending_attempts = 0
+          WHERE id = $2`,
+        [enabled, userId]
+    );
     invalidateUserCache(userId);
 
-    logAudit(req.user, enabled ? 'MFA_ENABLED' : 'MFA_DISABLED', `Two-factor authentication ${enabled ? 'enabled' : 'disabled'} for "${user.username}"`, req.ip);
-    res.json({ message: `Two-factor authentication ${enabled ? 'enabled' : 'disabled'} for ${user.fullName}.`, mfaEnabled: enabled });
+    logAudit(req.user, enabled ? 'MFA_ENABLED' : 'MFA_DISABLED',
+        `Two-factor authentication ${enabled ? 'enabled' : 'disabled'} for "${user.username}"`, req.ip);
+
+    res.json({
+        message: `Two-factor authentication ${enabled ? 'enabled' : 'disabled'} for ${user.fullName}.`,
+        mfaEnabled: enabled
+    });
 }));
 
 /**
@@ -350,22 +372,23 @@ router.post('/users/:id/mfa', asyncHandler(async (req, res) => {
  *
  * This replaces the old "MFA portal", which displayed live one-time codes in
  * plain text and therefore let any administrator sign in as any other user. It
- * now reports only *that* a challenge is outstanding, never the code itself.
+ * reports only *that* a challenge is outstanding, never the code — note that
+ * mfa_pending_code_hash is deliberately absent from the column list.
  */
 router.get('/mfa-status', asyncHandler(async (req, res) => {
-    const snap = await users().where('mfaPendingExpiresAt', '>', new Date()).get();
-
-    res.json(docsData(snap).map(user => ({
-        userId: user.id,
-        username: user.username,
-        fullName: user.fullName,
-        role: user.role,
-        method: user.mfaMethod === 'authenticator' && user.mfaSecret ? 'authenticator' : 'email',
-        maskedEmail: user.email ? `${user.email[0]}***@${user.email.split('@')[1] || ''}` : null,
-        attempts: Number(user.mfaPendingAttempts || 0),
-        expiresAt: user.mfaPendingExpiresAt,
-        sentAt: user.mfaLastSentAt || null
-    })));
+    res.json(await db.query(
+        `SELECT id AS user_id, username, full_name, role,
+                CASE WHEN mfa_method = 'authenticator' AND mfa_secret IS NOT NULL
+                     THEN 'authenticator' ELSE 'email' END AS method,
+                CASE WHEN email IS NULL THEN NULL
+                     ELSE left(email, 1) || '***@' || split_part(email, '@', 2) END AS masked_email,
+                mfa_pending_attempts AS attempts,
+                mfa_pending_expires_at AS expires_at,
+                mfa_last_sent_at AS sent_at
+           FROM users
+          WHERE mfa_pending_expires_at > now()
+          ORDER BY mfa_last_sent_at DESC NULLS LAST`
+    ));
 }));
 
 // ===========================================================================
@@ -380,17 +403,19 @@ router.put('/config', asyncHandler(async (req, res) => {
     const payload = { ...req.body };
 
     // Guard the numeric policy settings so a typo cannot make payroll nonsensical.
-    if (payload.nssfEmployeePercentage !== undefined) v.num(payload.nssfEmployeePercentage, 'NSSF employee percentage', { min: 0, max: 30 });
-    if (payload.nssfEmployerPercentage !== undefined) v.num(payload.nssfEmployerPercentage, 'NSSF employer percentage', { min: 0, max: 30 });
-    if (payload.minimumNetPercentage !== undefined) v.num(payload.minimumNetPercentage, 'Minimum net percentage', { min: 0, max: 90 });
-    if (payload.maxAdvancePercentage !== undefined) v.num(payload.maxAdvancePercentage, 'Maximum advance percentage', { min: 0, max: 100 });
-    if (payload.defaultAnnualLeaveDays !== undefined) v.num(payload.defaultAnnualLeaveDays, 'Annual leave days', { min: 0, max: 365, integer: true });
-    if (payload.maxAdvanceInstalments !== undefined) v.num(payload.maxAdvanceInstalments, 'Maximum advance instalments', { min: 1, max: 24, integer: true });
+    const bounds = {
+        nssfEmployeePercentage: [0, 30], nssfEmployerPercentage: [0, 30],
+        minimumNetPercentage: [0, 90], maxAdvancePercentage: [0, 100],
+        defaultAnnualLeaveDays: [0, 365], maxAdvanceInstalments: [1, 24]
+    };
+    for (const [key, [min, max]] of Object.entries(bounds)) {
+        if (payload[key] !== undefined) v.num(payload[key], key, { min, max });
+    }
     if (payload.taxMode !== undefined) v.oneOf(payload.taxMode, ['banded', 'flat', 'none'], 'Tax mode');
     if (payload.schoolName !== undefined) v.str(payload.schoolName, 'School name', { max: 120 });
     if (payload.currency !== undefined) v.str(payload.currency, 'Currency', { max: 8 });
 
-    const applied = await configService.updateConfig(payload);
+    const applied = await configService.updateConfig(payload, req.user.id);
     logAudit(req.user, 'UPDATE_CONFIG', `Updated settings: ${Object.keys(applied).join(', ')}`, req.ip);
     res.json({ message: 'Settings saved.', config: applied });
 }));
@@ -400,83 +425,100 @@ router.put('/config', asyncHandler(async (req, res) => {
 // ===========================================================================
 
 router.get('/audit-log', asyncHandler(async (req, res) => {
-    const result = await listAudit({
+    res.json(await listAudit({
         limit: req.query.limit,
         cursor: req.query.cursor || null,
         action: req.query.action || null,
         username: req.query.username || null,
         since: req.query.since || null
-    });
-    res.json(result);
+    }));
+}));
+
+router.get('/audit-log/actions', asyncHandler(async (req, res) => {
+    res.json(await listActions());
 }));
 
 // ===========================================================================
-// Reports, backup, stats
+// Reports, export, stats
 // ===========================================================================
 
 router.get('/reports/payroll-summary', asyncHandler(async (req, res) => {
-    const snap = await payroll().orderBy('year', 'desc').orderBy('month', 'desc').limit(120).get();
-    res.json(docsData(snap));
+    res.json(await db.query(
+        `SELECT id, month, year, status, version, employee_count, currency,
+                total_gross, total_deductions, total_net,
+                total_paye, total_nssf_employee, total_nssf_employer, total_employer_cost,
+                processed_by_name, approved_by_name, rejection_reason,
+                processed_at, approved_at, created_at,
+                to_char(make_date(year, month, 1), 'FMMonth YYYY') AS period_label
+           FROM payroll
+          ORDER BY year DESC, month DESC
+          LIMIT 120`
+    ));
 }));
 
 /**
- * JSON export of the operational collections.
+ * JSON export of the operational tables.
  *
- * Firebase takes managed backups of Firestore itself; this endpoint exists for
- * ad-hoc inspection and migration, and deliberately omits credential fields.
+ * Cloud SQL takes managed backups and supports point-in-time recovery; this
+ * endpoint is for ad-hoc inspection and migration, and omits credential fields.
  */
 router.get('/backup', asyncHandler(async (req, res) => {
-    const [userSnap, teacherSnap, accountantSnap, payrollSnap, itemSnap, structureSnap, configSnap, leaveSnap, advanceSnap] =
+    const [users, teachers, accountantRows, payroll, payrollItems, structures, config, leave, advances] =
         await Promise.all([
-            users().get(), teachers().get(), accountants().get(), payroll().get(),
-            payrollItems().get(), salaryStructures().get(), systemConfig().get(),
-            leaveRequests().get(), advanceRequests().get()
+            db.query(`SELECT ${SAFE_USER_COLUMNS} FROM users`),
+            db.query('SELECT * FROM teachers'),
+            db.query('SELECT * FROM accountants'),
+            db.query('SELECT * FROM payroll'),
+            db.query('SELECT * FROM payroll_items'),
+            db.query('SELECT * FROM salary_structures'),
+            db.query('SELECT config_key, config_value FROM system_config'),
+            db.query('SELECT * FROM leave_requests'),
+            db.query('SELECT * FROM advance_requests')
         ]);
-
-    const backup = {
-        exportedAt: new Date().toISOString(),
-        exportedBy: req.user.username,
-        projectId: process.env.FIREBASE_PROJECT_ID || 'edupay-ug',
-        users: docsData(userSnap).map(safeUser),
-        teachers: docsData(teacherSnap),
-        accountants: docsData(accountantSnap),
-        payroll: docsData(payrollSnap),
-        payrollItems: docsData(itemSnap),
-        salaryStructures: docsData(structureSnap),
-        systemConfig: docsData(configSnap),
-        leaveRequests: docsData(leaveSnap),
-        advanceRequests: docsData(advanceSnap)
-    };
 
     logAudit(req.user, 'BACKUP_EXPORTED', 'Downloaded a JSON data export', req.ip);
 
     res.setHeader('Content-Type', 'application/json');
-    res.setHeader('Content-Disposition', `attachment; filename="edupay_backup_${new Date().toISOString().slice(0, 10)}.json"`);
-    res.send(JSON.stringify(backup, null, 2));
+    res.setHeader('Content-Disposition',
+        `attachment; filename="edupay_backup_${new Date().toISOString().slice(0, 10)}.json"`);
+
+    res.send(JSON.stringify({
+        exportedAt: new Date().toISOString(),
+        exportedBy: req.user.username,
+        users, teachers, accountants: accountantRows, payroll, payrollItems,
+        salaryStructures: structures, systemConfig: config,
+        leaveRequests: leave, advanceRequests: advances
+    }, null, 2));
 }));
 
 router.get('/stats', asyncHandler(async (req, res) => {
-    const [totalUsers, activeAdmins, activeHr, activeAccountants, activeTeachers, payrollCount, recentPayroll, pendingActivation] =
-        await Promise.all([
-            users().count().get(),
-            users().where('role', '==', 'admin').where('isActive', '==', true).count().get(),
-            users().where('role', '==', 'hr').where('isActive', '==', true).count().get(),
-            users().where('role', '==', 'accountant').where('isActive', '==', true).count().get(),
-            users().where('role', '==', 'teacher').where('isActive', '==', true).count().get(),
-            payroll().count().get(),
-            payroll().orderBy('createdAt', 'desc').limit(1).get(),
-            users().where('passwordSetupCompleted', '==', false).count().get()
-        ]);
+    // One round trip for every dashboard figure, rather than eight.
+    const stats = await db.queryOne(`
+        SELECT
+            (SELECT count(*) FROM users)                                              AS total_users,
+            (SELECT count(*) FROM users WHERE role = 'admin'      AND is_active)      AS total_admins,
+            (SELECT count(*) FROM users WHERE role = 'hr'         AND is_active)      AS total_hr,
+            (SELECT count(*) FROM users WHERE role = 'accountant' AND is_active)      AS total_accountants,
+            (SELECT count(*) FROM users WHERE role = 'teacher'    AND is_active)      AS total_teachers,
+            (SELECT count(*) FROM users WHERE NOT password_setup_completed)           AS pending_activation,
+            (SELECT count(*) FROM payroll)                                            AS total_payrolls
+    `);
+
+    const recent = await db.queryOne(
+        `SELECT id, month, year, status, total_net,
+                to_char(make_date(year, month, 1), 'FMMonth YYYY') AS period_label
+           FROM payroll ORDER BY created_at DESC LIMIT 1`
+    );
 
     res.json({
-        totalUsers: totalUsers.data().count,
-        totalAdmins: activeAdmins.data().count,
-        totalHr: activeHr.data().count,
-        totalAccountants: activeAccountants.data().count,
-        totalTeachers: activeTeachers.data().count,
-        totalPayrolls: payrollCount.data().count,
-        pendingActivation: pendingActivation.data().count,
-        recentPayroll: recentPayroll.empty ? null : docData(recentPayroll.docs[0])
+        totalUsers: Number(stats.totalUsers),
+        totalAdmins: Number(stats.totalAdmins),
+        totalHr: Number(stats.totalHr),
+        totalAccountants: Number(stats.totalAccountants),
+        totalTeachers: Number(stats.totalTeachers),
+        pendingActivation: Number(stats.pendingActivation),
+        totalPayrolls: Number(stats.totalPayrolls),
+        recentPayroll: recent
     });
 }));
 

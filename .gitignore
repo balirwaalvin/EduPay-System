@@ -5,28 +5,26 @@ node_modules/
 .env
 .env.*
 !.env.example
-serviceAccountKey.json
-*serviceaccount*.json
-*-service-account*.json
 *.pem
 *.key
+*.crt
+cloud-sql-proxy
+cloud-sql-proxy.exe
 
 # Logs
 *.log
 npm-debug.log*
-
-# Firebase tooling
-.firebase/
-firebase-debug.log
-firestore-debug.log
-ui-debug.log
-*.local
 
 # Build and cache
 dist/
 build/
 .cache/
 coverage/
+
+# Database dumps
+*.sql.gz
+*.dump
+dumps/
 
 # OS files
 .DS_Store

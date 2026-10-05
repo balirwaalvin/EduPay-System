@@ -35,7 +35,7 @@ router.put('/read-all', asyncHandler(async (req, res) => {
 }));
 
 router.put('/:id/read', asyncHandler(async (req, res) => {
-    const id = v.docId(req.params.id, 'Notification id');
+    const id = v.num(req.params.id, 'Notification id', { integer: true, min: 1 });
     const ok = await notify.markRead(id, req.user.id);
     if (!ok) throw new HttpError(404, 'Notification not found.', 'NOT_FOUND');
     res.json({ message: 'Notification marked as read.' });

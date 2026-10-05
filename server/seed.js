@@ -1,26 +1,20 @@
 #!/usr/bin/env node
 /**
- * Idempotent bootstrap for a fresh Firestore database.
- *
- * Replaces the old SQL migration chain, which re-ran ~25 ALTER statements on
- * every boot with their errors swallowed — and, among them, one UPDATE that
- * silently disabled two-factor authentication for every user each restart.
+ * Idempotent bootstrap for a fresh database.
  *
  * Seeds, only where absent:
  *   - default salary scales
  *   - default system configuration
  *   - one administrator account, with a generated password printed once
  *
- * Usage: npm run db:seed
+ * Schema changes belong in server/migrations/, not here. Run migrations first:
+ *   npm run db:migrate && npm run db:seed
  */
-require('dotenv').config();
+require('dotenv').config({ quiet: true });
 
-const {
-    users, salaryStructures, systemConfig, serverTimestamp,
-    createUserWithUsername, verifyConnection, PROJECT_ID
-} = require('./firebase');
+const db = require('./db');
 const pw = require('./services/passwords');
-const { DEFAULTS } = require('./services/config');
+const configService = require('./services/config');
 
 const DEFAULT_SCALES = [
     { scale: 'Scale_1', basic: 800000, housing: 100000, transport: 50000, medical: 30000 },
@@ -30,45 +24,37 @@ const DEFAULT_SCALES = [
     { scale: 'Scale_5', basic: 3500000, housing: 400000, transport: 200000, medical: 150000 }
 ];
 
+async function requireSchema() {
+    const present = await db.scalar(
+        `SELECT count(*) AS count FROM information_schema.tables
+          WHERE table_schema = 'public' AND table_name = 'users'`
+    );
+
+    if (Number(present) === 0) {
+        throw Object.assign(new Error('The schema has not been created yet.'), { code: 'NO_SCHEMA' });
+    }
+}
+
 async function seedSalaryScales() {
     let created = 0;
 
     for (const entry of DEFAULT_SCALES) {
-        const ref = salaryStructures().doc(entry.scale);
-        if ((await ref.get()).exists) continue;
-
-        await ref.set({
-            salaryScale: entry.scale,
-            basicSalary: entry.basic,
-            housingAllowance: entry.housing,
-            transportAllowance: entry.transport,
-            medicalAllowance: entry.medical,
-            otherAllowance: 0,
-            // PAYE is banded by default, so this per-scale percentage is only
-            // consulted when the system is switched to `flat` tax mode.
-            taxPercentage: 0,
-            nssfPercentage: 5,
-            loanDeduction: 0,
-            otherDeduction: 0,
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp()
-        });
-        created++;
+        // ON CONFLICT DO NOTHING makes this safe to re-run.
+        created += await db.execute(
+            `INSERT INTO salary_structures
+                 (salary_scale, basic_salary, housing_allowance, transport_allowance,
+                  medical_allowance, other_allowance, tax_percentage, nssf_percentage)
+             VALUES ($1, $2, $3, $4, $5, 0, 0, 5)
+             ON CONFLICT (salary_scale) DO NOTHING`,
+            [entry.scale, entry.basic, entry.housing, entry.transport, entry.medical]
+        );
     }
 
     console.log(created ? `  Created ${created} salary scale(s).` : '  Salary scales already present.');
 }
 
 async function seedConfig() {
-    let created = 0;
-
-    for (const [key, value] of Object.entries(DEFAULTS)) {
-        const ref = systemConfig().doc(key);
-        if ((await ref.get()).exists) continue;
-        await ref.set({ value, updatedAt: serverTimestamp() });
-        created++;
-    }
-
+    const created = await configService.ensureDefaults();
     console.log(created ? `  Created ${created} configuration value(s).` : '  Configuration already present.');
 }
 
@@ -81,47 +67,38 @@ async function seedConfig() {
 async function seedAdministrator() {
     const username = (process.env.SEED_ADMIN_USERNAME || 'admin').toLowerCase();
 
-    const existing = await users().where('username', '==', username).limit(1).get();
-    if (!existing.empty) {
-        console.log(`  Administrator "${username}" already exists — left untouched.`);
-        return null;
-    }
-
-    const anyAdmin = await users().where('role', '==', 'admin').limit(1).get();
-    if (!anyAdmin.empty) {
-        console.log('  An administrator already exists — skipping.');
+    const existingAdmin = await db.queryOne(
+        "SELECT username FROM users WHERE role = 'admin' LIMIT 1"
+    );
+    if (existingAdmin) {
+        console.log(`  An administrator already exists ("${existingAdmin.username}") — left untouched.`);
         return null;
     }
 
     const password = process.env.SEED_ADMIN_PASSWORD || pw.generateTemporaryPassword(16);
-    const emailAddress = process.env.SEED_ADMIN_EMAIL || '';
 
-    await createUserWithUsername({
-        username,
-        password: await pw.hash(password),
-        role: 'admin',
-        fullName: process.env.SEED_ADMIN_FULL_NAME || 'System Administrator',
-        email: emailAddress,
-        phone: '',
-        isActive: true,
-        // Forced change on first sign-in, and this flag is now actually enforced.
-        mustChangePassword: true,
-        passwordSetupCompleted: true,
-        // Two-factor stays off until SMTP is configured, otherwise the only
-        // administrator could never receive a code.
-        mfaEnabled: false,
-        mfaMethod: 'email',
-        tokenVersion: 0
-    });
+    await db.execute(
+        `INSERT INTO users (
+             username, password_hash, role, full_name, email,
+             is_active, must_change_password, password_setup_completed,
+             mfa_enabled, mfa_method, token_version
+         ) VALUES ($1, $2, 'admin', $3, $4, TRUE, TRUE, TRUE, FALSE, 'email', 0)`,
+        [
+            username,
+            await pw.hash(password),
+            process.env.SEED_ADMIN_FULL_NAME || 'System Administrator',
+            (process.env.SEED_ADMIN_EMAIL || '').toLowerCase() || null
+        ]
+    );
 
     return { username, password, generated: !process.env.SEED_ADMIN_PASSWORD };
 }
 
 async function run() {
-    console.log(`\nSeeding EduPay in Firebase project "${PROJECT_ID}"\n`);
+    const info = await db.verifyConnection();
+    console.log(`\nSeeding ${info.database} (${info.version})\n`);
 
-    await verifyConnection();
-
+    await requireSchema();
     await seedSalaryScales();
     await seedConfig();
     const admin = await seedAdministrator();
@@ -142,14 +119,19 @@ async function run() {
 }
 
 run()
-    .then(() => process.exit(0))
-    .catch(err => {
-        console.error('\nSeeding failed:', err.message);
-        if (err.code === 5 || /NOT_FOUND/i.test(err.message)) {
-            console.error(
-                '\n  The Firestore database may not exist yet. In the Firebase console, open\n'
-                + `  Firestore Database for project "${PROJECT_ID}" and create it (production mode).\n`
-            );
+    .then(async () => { await db.close(); process.exit(0); })
+    .catch(async (err) => {
+        console.error(`\nSeeding failed: ${err.message}\n`);
+
+        if (err.code === 'NO_SCHEMA' || err.code === '42P01') {
+            console.error('  Run the migrations first:\n    npm run db:migrate\n');
+        } else if (err.code === '3D000') {
+            console.error('  That database does not exist. Create it in the Cloud SQL console first.\n');
+        } else if (err.code === 'ECONNREFUSED') {
+            console.error('  Nothing is listening at that address. If this is Cloud SQL, check that the\n'
+                + '  Auth Proxy is running, or that INSTANCE_UNIX_SOCKET is set.\n');
         }
+
+        await db.close().catch(() => { });
         process.exit(1);
     });

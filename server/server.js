@@ -1,10 +1,10 @@
-require('dotenv').config();
+require('dotenv').config({ quiet: true });
 const express = require('express');
 const path = require('path');
 const cors = require('cors');
 const helmet = require('helmet');
 
-const { verifyConnection, PROJECT_ID } = require('./firebase');
+const db = require('./db');
 const { apiLimiter, notFoundHandler, errorHandler, IS_PRODUCTION } = require('./middleware');
 const logger = require('./services/logger');
 const emailService = require('./services/email');
@@ -30,9 +30,10 @@ app.disable('x-powered-by');
 // user-supplied text; it is the backstop behind output escaping. All page
 // scripts live in external files so that `script-src` needs no inline allowance.
 // ---------------------------------------------------------------------------
-const FIREBASE_ORIGINS = [
+// Firebase Analytics on the sign-in page is the only external dependency left;
+// all data access is server-side against PostgreSQL.
+const ANALYTICS_ORIGINS = [
     'https://www.googleapis.com',
-    'https://firebase.googleapis.com',
     'https://firebaseinstallations.googleapis.com',
     'https://www.google-analytics.com',
     'https://region1.google-analytics.com'
@@ -47,7 +48,7 @@ app.use(helmet({
             styleSrc: ["'self'"],
             imgSrc: ["'self'", 'data:'],
             fontSrc: ["'self'"],
-            connectSrc: ["'self'", ...FIREBASE_ORIGINS],
+            connectSrc: ["'self'", ...ANALYTICS_ORIGINS],
             formAction: ["'self'"],
             frameAncestors: ["'none'"],
             objectSrc: ["'none'"],
@@ -126,16 +127,17 @@ app.get('/healthz', (req, res) => {
  */
 app.get('/readyz', async (req, res) => {
     try {
-        await verifyConnection();
+        const info = await db.verifyConnection();
         res.json({
             status: 'ready',
-            firestore: 'connected',
-            projectId: PROJECT_ID,
+            database: 'connected',
+            databaseName: info.database,
+            databaseVersion: info.version,
             email: emailService.isConfigured() ? 'configured' : 'not configured'
         });
     } catch (err) {
         logger.error('Readiness check failed', { error: err.message });
-        res.status(503).json({ status: 'unavailable', firestore: 'unreachable', error: err.message });
+        res.status(503).json({ status: 'unavailable', database: 'unreachable', error: err.message });
     }
 });
 
@@ -170,19 +172,37 @@ app.use(errorHandler);
 // Startup
 // ---------------------------------------------------------------------------
 async function start() {
+    let dbInfo;
     try {
-        await verifyConnection();
-        logger.info('Connected to Firestore', { projectId: PROJECT_ID });
+        dbInfo = await db.verifyConnection();
+        logger.info('Connected to PostgreSQL', dbInfo);
     } catch (err) {
-        logger.error('Could not reach Firestore', { error: err.message });
+        logger.error('Could not reach the database', { error: err.message, code: err.code });
         console.error(
-            '\n  Firestore is not reachable. Check that:\n'
-            + '    1. A service account is configured (FIREBASE_SERVICE_ACCOUNT, '
-            + 'FIREBASE_SERVICE_ACCOUNT_BASE64 or GOOGLE_APPLICATION_CREDENTIALS)\n'
-            + `    2. The Firestore database exists in project "${PROJECT_ID}"\n`
-            + '    3. The service account has the "Cloud Datastore User" role\n'
+            '\n  PostgreSQL is not reachable. Check that:\n'
+            + '    1. A connection is configured — INSTANCE_UNIX_SOCKET (Cloud Run),\n'
+            + '       DATABASE_URL, or DB_HOST/DB_USER/DB_PASSWORD/DB_NAME\n'
+            + '    2. For Cloud SQL from outside Google Cloud, the Auth Proxy is running\n'
+            + '    3. The database exists and the user can connect to it\n'
+            + '    4. Migrations have been applied: npm run db:migrate\n'
         );
         process.exit(1);
+    }
+
+    // A missing schema is a configuration mistake, not a runtime fault, so say so
+    // at startup rather than failing on the first request.
+    try {
+        const ready = await db.scalar(
+            `SELECT count(*) AS count FROM information_schema.tables
+              WHERE table_schema = 'public' AND table_name = 'users'`
+        );
+        if (Number(ready) === 0) {
+            logger.error('The database has no schema');
+            console.error('\n  The schema has not been created. Run:\n    npm run db:migrate\n');
+            process.exit(1);
+        }
+    } catch (err) {
+        logger.warn('Could not verify the schema', { error: err.message });
     }
 
     if (!emailService.isConfigured()) {
@@ -196,18 +216,22 @@ async function start() {
         logger.info('EduPay started', {
             port: PORT,
             env: process.env.NODE_ENV || 'development',
-            projectId: PROJECT_ID
+            database: dbInfo.database
         });
         if (!IS_PRODUCTION) {
             console.log(`\n  EduPay — School Payroll System`);
             console.log(`  http://localhost:${PORT}`);
-            console.log(`  Firebase project: ${PROJECT_ID}\n`);
+            console.log(`  Database: ${dbInfo.database} (${dbInfo.version})\n`);
         }
     });
 
     const shutdown = (signal) => {
         logger.info('Shutting down', { signal });
-        server.close(() => process.exit(0));
+        server.close(async () => {
+            // Close the connection pool so Cloud SQL does not hold the slots.
+            await db.close().catch(() => { });
+            process.exit(0);
+        });
         // Do not hang indefinitely if connections refuse to drain.
         setTimeout(() => process.exit(1), 10000).unref();
     };

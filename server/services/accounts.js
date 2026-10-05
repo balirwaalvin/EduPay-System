@@ -4,28 +4,27 @@
  * Teacher accounts used to be creatable through two different routes that
  * produced differently-shaped records: one issued an emailed setup link, the
  * other assigned the shared password `teacher123`. Every role now goes through
- * `createAccount` here, so activation, employee-id allocation and the audit
- * trail behave the same way everywhere.
+ * `createAccount`, so activation, employee-id allocation and the audit trail
+ * behave the same way everywhere.
  */
-const {
-    users, teachers, accountants, notifications, auditLog, leaveRequests,
-    advanceRequests, payrollItems, serverTimestamp, docData, createUserWithUsername,
-    releaseUsername, nextSequence, getDb, FieldValue, deleteQueryBatched, commitInChunks
-} = require('../firebase');
+const db = require('../db');
 const pw = require('./passwords');
 const email = require('./email');
 const logger = require('./logger');
 const { HttpError, invalidateUserCache } = require('../middleware');
 
 const SETUP_TTL_HOURS = Number(process.env.PASSWORD_SETUP_TTL_HOURS || 24);
-
 const EMPLOYEE_ID_PREFIX = { teacher: 'TCH', accountant: 'ACC', hr: 'HRM', admin: 'ADM' };
 
 /** Allocate the next employee id for a role, e.g. TCH0007. */
-async function allocateEmployeeId(role) {
+async function allocateEmployeeId(role, client = null) {
     const prefix = EMPLOYEE_ID_PREFIX[role] || 'EMP';
-    const seq = await nextSequence(`employeeId_${role}`);
-    return `${prefix}${String(seq).padStart(4, '0')}`;
+    const next = await db.nextSequence(`employee_id_${role}`, client);
+    return `${prefix}${String(next).padStart(4, '0')}`;
+}
+
+function baseUrl(req) {
+    return (process.env.BASE_URL || `${req.protocol}://${req.get('host')}`).replace(/\/+$/, '');
 }
 
 /**
@@ -37,11 +36,14 @@ async function allocateEmployeeId(role) {
  *   - otherwise -> a unique random temporary password returned to the caller
  *     once, for out-of-band delivery, with a forced change on first sign-in
  *
- * @returns {{userId: string, activation: object}}
+ * Accepts an optional transaction client so the account and its role profile are
+ * created atomically.
+ *
+ * @returns {{userId: number, activation: object}}
  */
 async function createAccount({
     username, role, fullName, emailAddress, phone,
-    actor, req, preferSetupLink = true, mfaEnabled = null
+    actor, req, preferSetupLink = true, mfaEnabled = null, client = null
 }) {
     const canEmail = Boolean(emailAddress) && email.isConfigured();
     const useSetupLink = preferSetupLink && canEmail;
@@ -65,27 +67,30 @@ async function createAccount({
         passwordHash = await pw.hash(temporaryPassword);
     }
 
-    // Two-factor authentication defaults on, but only where email can actually
-    // deliver the code — otherwise it would lock the account out immediately.
+    // Two-factor defaults on, but only where email can actually deliver the
+    // code — otherwise it would lock the account out immediately.
     const mfa = mfaEnabled === null ? canEmail : Boolean(mfaEnabled);
 
-    const userId = await createUserWithUsername({
-        username,
-        password: passwordHash,
-        role,
-        fullName,
-        email: emailAddress || '',
-        phone: phone || '',
-        isActive: true,
-        mustChangePassword: !useSetupLink,
-        passwordSetupCompleted: !useSetupLink,
-        passwordSetupTokenHash: setupTokenHash,
-        passwordSetupExpiresAt: setupExpiresAt,
-        mfaEnabled: mfa,
-        mfaMethod: 'email',
-        tokenVersion: 0,
-        createdBy: actor?.id || null
-    });
+    let created;
+    try {
+        created = await db.queryOne(
+            `INSERT INTO users (
+                 username, password_hash, role, full_name, email, phone,
+                 is_active, must_change_password, password_setup_completed,
+                 password_setup_token_hash, password_setup_expires_at,
+                 mfa_enabled, mfa_method, token_version, created_by
+             ) VALUES ($1, $2, $3, $4, $5, $6, TRUE, $7, $8, $9, $10, $11, 'email', 0, $12)
+             RETURNING id`,
+            [
+                username, passwordHash, role, fullName, emailAddress || null, phone || null,
+                !useSetupLink, !useSetupLink, setupTokenHash, setupExpiresAt, mfa, actor?.id || null
+            ],
+            client
+        );
+    } catch (err) {
+        // The unique index on username turns a race into a clean 409.
+        throw db.translateError(err);
+    }
 
     const activation = {
         method: useSetupLink ? 'setup_link' : 'temporary_password',
@@ -95,220 +100,220 @@ async function createAccount({
     };
 
     if (useSetupLink) {
-        const base = (process.env.BASE_URL || `${req.protocol}://${req.get('host')}`).replace(/\/+$/, '');
         try {
             await email.sendPasswordSetupEmail({
                 toEmail: emailAddress,
                 fullName,
-                setupLink: `${base}/setup-password.html?token=${setupToken}`,
+                setupLink: `${baseUrl(req)}/setup-password.html?token=${setupToken}`,
                 expiryHours: SETUP_TTL_HOURS
             });
             activation.emailSent = true;
         } catch (err) {
-            logger.error('Failed to send setup email', { userId, error: err.message });
-            activation.emailError = 'The account was created but the setup email could not be sent. Use "Resend setup link".';
+            logger.error('Failed to send setup email', { userId: created.id, error: err.message });
+            activation.emailError =
+                'The account was created but the setup email could not be sent. Use "Resend setup link".';
         }
     } else if (emailAddress && email.isConfigured()) {
-        const base = (process.env.BASE_URL || `${req.protocol}://${req.get('host')}`).replace(/\/+$/, '');
         try {
             await email.sendTemporaryCredentialsEmail({
                 toEmail: emailAddress,
                 fullName,
                 username,
                 temporaryPassword,
-                loginUrl: `${base}/`
+                loginUrl: `${baseUrl(req)}/`
             });
             activation.emailSent = true;
         } catch (err) {
-            logger.error('Failed to send credentials email', { userId, error: err.message });
+            logger.error('Failed to send credentials email', { userId: created.id, error: err.message });
         }
     }
 
-    return { userId, activation };
+    return { userId: Number(created.id), activation };
 }
 
 /** Issue a fresh setup link for an account that has not been activated yet. */
 async function resendSetupLink({ userId, req }) {
-    const user = docData(await users().doc(userId).get());
+    const user = await db.queryOne(
+        'SELECT id, full_name, email, password_setup_completed FROM users WHERE id = $1',
+        [userId]
+    );
+
     if (!user) throw new HttpError(404, 'Account not found.', 'USER_NOT_FOUND');
-    if (user.passwordSetupCompleted !== false) {
-        throw new HttpError(400, 'This account is already active, so no setup link is needed. Use "Reset password" instead.', 'ALREADY_ACTIVE');
+    if (user.passwordSetupCompleted) {
+        throw new HttpError(400,
+            'This account is already active, so no setup link is needed. Use "Reset password" instead.',
+            'ALREADY_ACTIVE');
     }
     if (!user.email) throw new HttpError(400, 'This account has no email address on file.', 'NO_EMAIL');
     if (!email.isConfigured()) throw new HttpError(503, 'Email delivery is not configured.', 'EMAIL_UNAVAILABLE');
 
     const { token, tokenHash } = pw.generateToken(32);
-    const expiresAt = new Date(Date.now() + SETUP_TTL_HOURS * 60 * 60 * 1000);
 
-    await users().doc(userId).update({
-        passwordSetupTokenHash: tokenHash,
-        passwordSetupExpiresAt: expiresAt,
-        updatedAt: serverTimestamp()
-    });
+    await db.execute(
+        `UPDATE users SET password_setup_token_hash = $1, password_setup_expires_at = $2 WHERE id = $3`,
+        [tokenHash, new Date(Date.now() + SETUP_TTL_HOURS * 60 * 60 * 1000), userId]
+    );
 
-    const base = (process.env.BASE_URL || `${req.protocol}://${req.get('host')}`).replace(/\/+$/, '');
     await email.sendPasswordSetupEmail({
         toEmail: user.email,
         fullName: user.fullName,
-        setupLink: `${base}/setup-password.html?token=${token}`,
+        setupLink: `${baseUrl(req)}/setup-password.html?token=${token}`,
         expiryHours: SETUP_TTL_HOURS
     });
 
     return { email: user.email, expiresInHours: SETUP_TTL_HOURS };
 }
 
-/**
- * Deactivate an account.
- *
- * Preferred over deletion: staff appear on historical payroll runs, and those
- * records must stay intact and attributable. Also revokes live sessions.
- */
-async function deactivateAccount({ userId, actor, reason }) {
-    if (userId === actor.id) {
-        throw new HttpError(400, 'You cannot deactivate your own account.', 'SELF_DEACTIVATE');
-    }
-
-    const user = docData(await users().doc(userId).get());
-    if (!user) throw new HttpError(404, 'Account not found.', 'USER_NOT_FOUND');
-
-    await assertNotLastAdmin(user, 'deactivate');
-
-    const batch = getDb().batch();
-    batch.update(users().doc(userId), {
-        isActive: false,
-        deactivatedAt: serverTimestamp(),
-        deactivatedBy: actor.id,
-        deactivationReason: reason || null,
-        tokenVersion: FieldValue.increment(1),
-        updatedAt: serverTimestamp()
-    });
-
-    // Mirror the status onto the role profile so lists and payroll agree.
-    const profile = await findProfileByUserId(userId, user.role);
-    if (profile) {
-        batch.update(profile.ref, { isActive: false, updatedAt: serverTimestamp() });
-    }
-
-    await batch.commit();
-
-    // Drop the cached copy so the revocation takes effect on the very next
-    // request rather than whenever the cache happens to expire.
-    invalidateUserCache(userId);
-
-    return user;
-}
-
-async function reactivateAccount({ userId, actor }) {
-    const user = docData(await users().doc(userId).get());
-    if (!user) throw new HttpError(404, 'Account not found.', 'USER_NOT_FOUND');
-
-    const batch = getDb().batch();
-    batch.update(users().doc(userId), {
-        isActive: true,
-        deactivatedAt: FieldValue.delete(),
-        deactivatedBy: FieldValue.delete(),
-        deactivationReason: FieldValue.delete(),
-        reactivatedAt: serverTimestamp(),
-        reactivatedBy: actor.id,
-        updatedAt: serverTimestamp()
-    });
-
-    const profile = await findProfileByUserId(userId, user.role);
-    if (profile) batch.update(profile.ref, { isActive: true, updatedAt: serverTimestamp() });
-
-    await batch.commit();
-    invalidateUserCache(userId);
-
-    return user;
-}
-
-/** Locate a user's role profile document (teacher/accountant), if any. */
-async function findProfileByUserId(userId, role) {
-    const collection = role === 'teacher' ? teachers() : role === 'accountant' ? accountants() : null;
-    if (!collection) return null;
-
-    const snap = await collection.where('userId', '==', userId).limit(1).get();
-    if (snap.empty) return null;
-    return { ref: snap.docs[0].ref, data: docData(snap.docs[0]) };
-}
-
 /** Refuse to remove the last route into the system. */
-async function assertNotLastAdmin(user, verb) {
+async function assertNotLastAdmin(user, verb, client = null) {
     if (user.role !== 'admin') return;
 
-    const snap = await users()
-        .where('role', '==', 'admin')
-        .where('isActive', '==', true)
-        .count()
-        .get();
+    const count = await db.scalar(
+        "SELECT count(*) AS count FROM users WHERE role = 'admin' AND is_active AND id <> $1",
+        [user.id],
+        client
+    );
 
-    if (snap.data().count <= 1) {
+    if (Number(count) === 0) {
         throw new HttpError(
             400,
-            `This is the only active administrator account, so it cannot be ${verb}d. Create another administrator first.`,
+            `This is the only active administrator account, so it cannot be ${verb}d. `
+            + 'Create another administrator first.',
             'LAST_ADMIN'
         );
     }
 }
 
 /**
- * Permanently delete an account and its dependent records.
+ * Deactivate an account.
  *
- * The old implementation deleted the parent row and left referencing records
- * behind, so the request failed outright for anyone who had ever been audited or
- * paid. Deletion is now refused when payroll history exists — that record must
- * be preserved — and all other dependents are cleaned up explicitly.
+ * Preferred over deletion: staff appear on historical payroll runs, and those
+ * records must stay intact and attributable. Also revokes live sessions by
+ * bumping `token_version`.
+ */
+async function deactivateAccount({ userId, actor, reason }) {
+    if (Number(userId) === Number(actor.id)) {
+        throw new HttpError(400, 'You cannot deactivate your own account.', 'SELF_DEACTIVATE');
+    }
+
+    const user = await db.withTransaction(async (client) => {
+        const existing = await db.queryOne(
+            'SELECT id, username, full_name, role FROM users WHERE id = $1 FOR UPDATE',
+            [userId],
+            client
+        );
+        if (!existing) throw new HttpError(404, 'Account not found.', 'USER_NOT_FOUND');
+
+        await assertNotLastAdmin(existing, 'deactivate', client);
+
+        await client.query(
+            `UPDATE users
+                SET is_active = FALSE, deactivated_at = now(), deactivated_by = $1,
+                    deactivation_reason = $2, token_version = token_version + 1
+              WHERE id = $3`,
+            [actor.id, reason || null, userId]
+        );
+
+        // Mirror the status onto the role profile so lists and payroll agree.
+        if (existing.role === 'teacher') {
+            await client.query('UPDATE teachers SET is_active = FALSE WHERE user_id = $1', [userId]);
+        } else if (existing.role === 'accountant') {
+            await client.query('UPDATE accountants SET is_active = FALSE WHERE user_id = $1', [userId]);
+        }
+
+        return existing;
+    });
+
+    // Drop the cached copy so the revocation takes effect on the very next
+    // request rather than whenever the cache happens to expire.
+    invalidateUserCache(userId);
+    return user;
+}
+
+async function reactivateAccount({ userId, actor }) {
+    const user = await db.withTransaction(async (client) => {
+        const existing = await db.queryOne(
+            'SELECT id, username, full_name, role FROM users WHERE id = $1 FOR UPDATE',
+            [userId],
+            client
+        );
+        if (!existing) throw new HttpError(404, 'Account not found.', 'USER_NOT_FOUND');
+
+        await client.query(
+            `UPDATE users
+                SET is_active = TRUE, deactivated_at = NULL, deactivated_by = NULL,
+                    deactivation_reason = NULL, reactivated_at = now(), reactivated_by = $1
+              WHERE id = $2`,
+            [actor.id, userId]
+        );
+
+        if (existing.role === 'teacher') {
+            await client.query('UPDATE teachers SET is_active = TRUE WHERE user_id = $1', [userId]);
+        } else if (existing.role === 'accountant') {
+            await client.query('UPDATE accountants SET is_active = TRUE WHERE user_id = $1', [userId]);
+        }
+
+        return existing;
+    });
+
+    invalidateUserCache(userId);
+    return user;
+}
+
+/**
+ * Permanently delete an account.
+ *
+ * The schema does most of the work. `ON DELETE CASCADE` removes the teacher or
+ * accountant profile and the account's notifications; `ON DELETE SET NULL`
+ * detaches the audit trail so it survives; and `payroll_items.teacher_id`
+ * is `ON DELETE RESTRICT`, so the database itself refuses to destroy anyone with
+ * payroll history. That refusal is caught here and reported as advice to
+ * deactivate instead.
  */
 async function deleteAccount({ userId, actor }) {
-    if (userId === actor.id) {
+    if (Number(userId) === Number(actor.id)) {
         throw new HttpError(400, 'You cannot delete your own account.', 'SELF_DELETE');
     }
 
-    const user = docData(await users().doc(userId).get());
-    if (!user) throw new HttpError(404, 'Account not found.', 'USER_NOT_FOUND');
+    const user = await db.withTransaction(async (client) => {
+        const existing = await db.queryOne(
+            'SELECT id, username, full_name, role FROM users WHERE id = $1 FOR UPDATE',
+            [userId],
+            client
+        );
+        if (!existing) throw new HttpError(404, 'Account not found.', 'USER_NOT_FOUND');
 
-    await assertNotLastAdmin(user, 'delete');
+        await assertNotLastAdmin(existing, 'delete', client);
 
-    const profile = await findProfileByUserId(userId, user.role);
+        // Keep the trail, detached from the account that is going away.
+        await client.query(
+            'UPDATE audit_log SET user_id = NULL, user_deleted = TRUE WHERE user_id = $1',
+            [userId]
+        );
 
-    // Payroll history is immutable: block deletion and point to deactivation.
-    if (profile && user.role === 'teacher') {
-        const paid = await payrollItems().where('teacherId', '==', profile.data.id).limit(1).get();
-        if (!paid.empty) {
-            throw new HttpError(
-                409,
-                'This teacher appears on at least one payroll run, so the record cannot be deleted without destroying payroll history. Deactivate the account instead.',
-                'HAS_PAYROLL_HISTORY'
-            );
+        try {
+            await client.query('DELETE FROM users WHERE id = $1', [userId]);
+        } catch (err) {
+            // payroll_items_teacher_id_fkey is RESTRICT, which lands here.
+            throw db.translateError(err);
         }
-    }
 
-    // Remove dependents that carry no financial history.
-    await deleteQueryBatched(notifications().where('userId', '==', userId));
+        return existing;
+    });
 
-    if (profile && user.role === 'teacher') {
-        await deleteQueryBatched(leaveRequests().where('teacherId', '==', profile.data.id));
-        await deleteQueryBatched(advanceRequests().where('teacherId', '==', profile.data.id));
-    }
-
-    // Keep audit entries, but detach them from the deleted account so the trail
-    // survives while no longer pointing at a record that is gone.
-    const auditSnap = await auditLog().where('userId', '==', userId).get();
-    if (!auditSnap.empty) {
-        await commitInChunks(auditSnap.docs.map(doc => (batch) => {
-            batch.update(doc.ref, { userId: null, userDeleted: true });
-        }));
-    }
-
-    const batch = getDb().batch();
-    if (profile) batch.delete(profile.ref);
-    batch.delete(users().doc(userId));
-    await batch.commit();
     invalidateUserCache(userId);
-
-    await releaseUsername(user.username);
-
     return user;
+}
+
+/** Look up a user's teacher or accountant profile, if any. */
+async function findProfileByUserId(userId, role) {
+    if (role === 'teacher') {
+        return db.queryOne('SELECT * FROM teachers WHERE user_id = $1', [userId]);
+    }
+    if (role === 'accountant') {
+        return db.queryOne('SELECT * FROM accountants WHERE user_id = $1', [userId]);
+    }
+    return null;
 }
 
 module.exports = {
@@ -318,5 +323,6 @@ module.exports = {
     reactivateAccount,
     deleteAccount,
     allocateEmployeeId,
-    findProfileByUserId
+    findProfileByUserId,
+    assertNotLastAdmin
 };

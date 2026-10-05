@@ -1,15 +1,18 @@
 {
     "name": "edupay-system",
-    "version": "2.0.0",
-    "description": "EduPay - School Payroll System (Firebase/Firestore)",
+    "version": "2.1.0",
+    "description": "EduPay - School Payroll System (PostgreSQL / Google Cloud SQL)",
     "main": "server/server.js",
     "scripts": {
         "build": "echo No build step required for this app",
         "start": "node server/server.js",
         "dev": "node --watch server/server.js",
+        "db:migrate": "node server/migrate.js",
+        "db:migrate:status": "node server/migrate.js status",
         "db:seed": "node server/seed.js",
-        "db:indexes": "firebase deploy --only firestore:indexes",
-        "test": "node --test tests/"
+        "db:setup": "npm run db:migrate && npm run db:seed",
+        "test": "node --test --test-concurrency=1 tests/",
+        "test:unit": "node --test tests/tax.test.js tests/payroll-calculator.test.js tests/leave.test.js tests/advances.test.js tests/validate.test.js tests/escaping.test.js tests/smoke.test.js"
     },
     "engines": {
         "node": ">=20.0.0"
@@ -18,7 +21,7 @@
         "payroll",
         "school",
         "edupay",
-        "firebase"
+        "postgresql"
     ],
     "author": "",
     "license": "ISC",
@@ -29,11 +32,14 @@
         "exceljs": "^4.4.0",
         "express": "^4.21.2",
         "express-rate-limit": "^8.1.0",
-        "firebase-admin": "^13.5.0",
         "helmet": "^8.1.0",
         "jsonwebtoken": "^9.0.2",
         "nodemailer": "^10.0.15",
         "otplib": "^12.0.1",
-        "pdfkit": "^0.17.2"
+        "pdfkit": "^0.17.2",
+        "pg": "^8.16.3"
+    },
+    "overrides": {
+        "uuid": "^11.1.1"
     }
 }

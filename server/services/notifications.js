@@ -1,17 +1,17 @@
 /**
  * Notifications.
  *
- * Previously only teachers ever received a notification, so approvers had no
- * signal that work was waiting for them and had to poll their dashboards. This
- * service can target a single user or every active holder of a role, which is
- * what the approval chain needs:
+ * Previously only teachers ever received one, so approvers had no signal that
+ * work was waiting and had to poll their dashboards. This service can target a
+ * single user or every active holder of a role, which is what the approval chain
+ * needs:
  *
  *   teacher submits leave/advance -> HR is told there is something to approve
  *   accountant processes payroll  -> HR is told approval is pending
  *   HR approves payroll           -> accountant is told it is payable
  *   accountant marks paid         -> teacher is told
  */
-const { notifications, users, serverTimestamp, docsData, commitInChunks } = require('../firebase');
+const db = require('../db');
 const logger = require('./logger');
 
 const CATEGORIES = {
@@ -23,132 +23,144 @@ const CATEGORIES = {
     system: 'system'
 };
 
-function buildNotification({ title, message, category, link, severity, actorId }) {
-    return {
-        title,
-        message,
-        category: category || CATEGORIES.system,
-        severity: severity || 'info',
-        link: link || null,
-        actorId: actorId || null,
-        isRead: false,
-        createdAt: serverTimestamp()
-    };
-}
+const COLUMNS = '(user_id, title, message, category, severity, link, actor_id)';
 
-/** Notify one user by user id. Resolves even if the write fails. */
-async function notifyUser(userId, payload) {
+/** Notify one user. Resolves even if the write fails. */
+async function notifyUser(userId, { title, message, category, severity, link, actorId }, client = null) {
     if (!userId) return;
+
     try {
-        await notifications().add({ userId, ...buildNotification(payload) });
+        await db.execute(
+            `INSERT INTO notifications ${COLUMNS} VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+            [userId, title, message, category || CATEGORIES.system, severity || 'info', link || null, actorId || null],
+            client
+        );
     } catch (err) {
         logger.error('Failed to create notification', { userId, error: err.message });
     }
 }
 
-/** Notify every active user holding any of the given roles. */
-async function notifyRoles(roles, payload) {
+/**
+ * Notify every active user holding any of the given roles.
+ *
+ * One statement: the recipients are selected and inserted in the same query,
+ * rather than read into the application and written back row by row.
+ */
+async function notifyRoles(roles, { title, message, category, severity, link, actorId }, client = null) {
     const roleList = Array.isArray(roles) ? roles : [roles];
-    if (!roleList.length) return;
+    if (!roleList.length) return 0;
 
     try {
-        const snap = await users()
-            .where('role', 'in', roleList.slice(0, 10))
-            .where('isActive', '==', true)
-            .get();
-
-        const recipients = docsData(snap);
-        if (!recipients.length) return;
-
-        const body = buildNotification(payload);
-        await commitInChunks(recipients.map(user => (batch) => {
-            batch.set(notifications().doc(), { userId: user.id, ...body });
-        }));
+        return await db.execute(
+            `INSERT INTO notifications ${COLUMNS}
+             SELECT id, $1, $2, $3, $4, $5, $6
+               FROM users
+              WHERE role = ANY($7::text[]) AND is_active`,
+            [title, message, category || CATEGORIES.system, severity || 'info',
+                link || null, actorId || null, roleList],
+            client
+        );
     } catch (err) {
         logger.error('Failed to create role notifications', { roles: roleList, error: err.message });
+        return 0;
     }
 }
 
-/** Notify many specific users with the same body in as few writes as possible. */
-async function notifyUsers(userIds, payload) {
+/** Notify many specific users with the same body. */
+async function notifyUsers(userIds, { title, message, category, severity, link, actorId }, client = null) {
     const unique = [...new Set((userIds || []).filter(Boolean))];
-    if (!unique.length) return;
+    if (!unique.length) return 0;
 
     try {
-        const body = buildNotification(payload);
-        await commitInChunks(unique.map(userId => (batch) => {
-            batch.set(notifications().doc(), { userId, ...body });
-        }));
+        return await db.execute(
+            `INSERT INTO notifications ${COLUMNS}
+             SELECT unnest($1::bigint[]), $2, $3, $4, $5, $6, $7`,
+            [unique, title, message, category || CATEGORIES.system, severity || 'info',
+                link || null, actorId || null],
+            client
+        );
     } catch (err) {
         logger.error('Failed to create bulk notifications', { count: unique.length, error: err.message });
+        return 0;
     }
 }
 
-/** Notify many users with a per-user message (e.g. each teacher's own net pay). */
-async function notifyUsersIndividually(entries) {
-    const valid = (entries || []).filter(e => e && e.userId);
-    if (!valid.length) return;
+/**
+ * Notify many users with a per-user message, e.g. each teacher's own net pay.
+ * Sent as one multi-row insert regardless of how many recipients there are.
+ */
+async function notifyUsersIndividually(entries, client = null) {
+    const valid = (entries || []).filter(entry => entry && entry.userId);
+    if (!valid.length) return 0;
 
     try {
-        await commitInChunks(valid.map(entry => (batch) => {
-            batch.set(notifications().doc(), { userId: entry.userId, ...buildNotification(entry) });
-        }));
+        const { text, values } = db.buildBulkInsert(
+            'notifications',
+            ['user_id', 'title', 'message', 'category', 'severity', 'link', 'actor_id'],
+            valid.map(entry => ({
+                userId: entry.userId,
+                title: entry.title,
+                message: entry.message,
+                category: entry.category || CATEGORIES.system,
+                severity: entry.severity || 'info',
+                link: entry.link || null,
+                actorId: entry.actorId || null
+            })),
+            { returning: null }
+        );
+
+        return await db.execute(text, values, client);
     } catch (err) {
         logger.error('Failed to create individual notifications', { count: valid.length, error: err.message });
+        return 0;
     }
 }
 
 /** List a user's notifications, newest first. */
 async function listForUser(userId, { limit = 50, unreadOnly = false } = {}) {
-    let query = notifications().where('userId', '==', userId);
-    if (unreadOnly) query = query.where('isRead', '==', false);
+    const capped = Math.min(Math.max(Number(limit) || 50, 1), 100);
 
-    const snap = await query
-        .orderBy('createdAt', 'desc')
-        .limit(Math.min(Math.max(Number(limit) || 50, 1), 100))
-        .get();
-
-    return docsData(snap);
+    return db.query(
+        `SELECT id, title, message, category, severity, link, is_read, created_at, read_at
+           FROM notifications
+          WHERE user_id = $1 ${unreadOnly ? 'AND NOT is_read' : ''}
+          ORDER BY id DESC
+          LIMIT $2`,
+        [userId, capped]
+    );
 }
 
 async function unreadCount(userId) {
-    const snap = await notifications()
-        .where('userId', '==', userId)
-        .where('isRead', '==', false)
-        .count()
-        .get();
-    return snap.data().count;
+    const count = await db.scalar(
+        'SELECT count(*) AS count FROM notifications WHERE user_id = $1 AND NOT is_read',
+        [userId]
+    );
+    return Number(count) || 0;
 }
 
 /** Mark one notification read, but only if it belongs to the caller. */
 async function markRead(notificationId, userId) {
-    const ref = notifications().doc(notificationId);
-    const snap = await ref.get();
-    if (!snap.exists || snap.data().userId !== userId) return false;
-    await ref.update({ isRead: true, readAt: serverTimestamp() });
-    return true;
+    const affected = await db.execute(
+        `UPDATE notifications SET is_read = TRUE, read_at = now()
+          WHERE id = $1 AND user_id = $2 AND NOT is_read`,
+        [notificationId, userId]
+    );
+
+    if (affected) return true;
+
+    // Distinguish "already read" from "not yours", so the caller can 404 correctly.
+    const exists = await db.scalar(
+        'SELECT count(*) AS count FROM notifications WHERE id = $1 AND user_id = $2',
+        [notificationId, userId]
+    );
+    return Number(exists) > 0;
 }
 
 async function markAllRead(userId) {
-    const snap = await notifications()
-        .where('userId', '==', userId)
-        .where('isRead', '==', false)
-        .get();
-
-    if (snap.empty) return 0;
-
-    await commitInChunks(snap.docs.map(doc => (batch) => {
-        batch.update(doc.ref, { isRead: true, readAt: serverTimestamp() });
-    }));
-    return snap.size;
-}
-
-/** Remove a user's notifications — used when an account is deleted. */
-async function deleteForUser(userId) {
-    const snap = await notifications().where('userId', '==', userId).get();
-    if (snap.empty) return 0;
-    await commitInChunks(snap.docs.map(doc => (batch) => batch.delete(doc.ref)));
-    return snap.size;
+    return db.execute(
+        'UPDATE notifications SET is_read = TRUE, read_at = now() WHERE user_id = $1 AND NOT is_read',
+        [userId]
+    );
 }
 
 module.exports = {
@@ -160,6 +172,5 @@ module.exports = {
     listForUser,
     unreadCount,
     markRead,
-    markAllRead,
-    deleteForUser
+    markAllRead
 };

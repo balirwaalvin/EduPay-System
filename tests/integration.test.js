@@ -1,26 +1,27 @@
 /**
- * End-to-end workflow tests against a real Firestore instance.
+ * End-to-end workflow tests against a real PostgreSQL database.
  *
- * Start the emulator first:
- *   npx firebase emulators:start --only firestore
- *   FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 npm test
+ * Point TEST_DATABASE_URL at a throwaway database and run:
+ *   TEST_DATABASE_URL=postgresql://user:pass@localhost:5432/edupay_test npm test
  *
- * The suite wipes the emulator and seeds it before running, so it is repeatable.
- * Without FIRESTORE_EMULATOR_HOST it skips entirely, so `npm test` still works
- * with no Firebase credentials. It refuses to run against a real database.
+ * The suite truncates every table and seeds a known state before running, so it
+ * is repeatable. Without TEST_DATABASE_URL it skips entirely, so `npm test`
+ * still works with no database. It refuses to run unless the database name
+ * contains "test", so it cannot destroy real data.
  */
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const http = require('node:http');
 
-const EMULATOR = process.env.FIRESTORE_EMULATOR_HOST;
+const TEST_DATABASE_URL = process.env.TEST_DATABASE_URL;
 
 process.env.NODE_ENV = 'test';
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'integration-secret-long-enough-for-tests-32';
 process.env.RATE_LIMIT_AUTH = '500';
 process.env.RATE_LIMIT_API = '5000';
+if (TEST_DATABASE_URL) process.env.DATABASE_URL = TEST_DATABASE_URL;
 
-const suite = EMULATOR ? test.describe : test.describe.skip;
+const suite = TEST_DATABASE_URL ? test.describe : test.describe.skip;
 
 suite('EduPay payroll workflow', () => {
     let server;
@@ -59,51 +60,50 @@ suite('EduPay payroll workflow', () => {
     };
 
     test.before(async () => {
-        // Guard: this suite destroys data, so it must only ever see an emulator.
+        // Guard: this suite destroys data, so refuse anything that is not
+        // obviously a test database.
+        const name = new URL(TEST_DATABASE_URL).pathname.replace('/', '');
         assert.ok(
-            /^(localhost|127\.0\.0\.1|\[::1\]):\d+$/.test(EMULATOR),
-            `refusing to run destructive tests against "${EMULATOR}" — point FIRESTORE_EMULATOR_HOST at a local emulator`
+            /test/i.test(name),
+            `refusing to run destructive tests against database "${name}" — its name must contain "test"`
         );
 
-        const project = process.env.FIREBASE_PROJECT_ID || 'edupay-ug';
-        const wipe = await fetch(
-            `http://${EMULATOR}/emulator/v1/projects/${project}/databases/(default)/documents`,
-            { method: 'DELETE' }
-        );
-        assert.equal(wipe.status, 200, 'could not clear the emulator — is it running?');
+        const db = require('../server/db');
+        const { migrate } = require('../server/migrate');
 
-        // Seed a known starting state.
-        process.env.SEED_ADMIN_PASSWORD = admin.password;
-        const { users, salaryStructures, systemConfig, serverTimestamp, createUserWithUsername } =
-            require('../server/firebase');
-        const pwService = require('../server/services/passwords');
-        const { DEFAULTS } = require('../server/services/config');
-
-        await Promise.all(Object.entries(DEFAULTS).map(([key, value]) =>
-            systemConfig().doc(key).set({ value, updatedAt: serverTimestamp() })
+        // Apply the schema if this database is empty.
+        const hasSchema = Number(await db.scalar(
+            `SELECT count(*) AS count FROM information_schema.tables
+              WHERE table_schema = 'public' AND table_name = 'users'`
         ));
+        if (!hasSchema) await migrate();
 
-        await salaryStructures().doc('Scale_1').set({
-            salaryScale: 'Scale_1', basicSalary: 800000, housingAllowance: 100000,
-            transportAllowance: 50000, medicalAllowance: 30000, otherAllowance: 0,
-            taxPercentage: 0, nssfPercentage: 5, loanDeduction: 0, otherDeduction: 0,
-            createdAt: serverTimestamp(), updatedAt: serverTimestamp()
-        });
+        // Reset to a known state. TRUNCATE CASCADE also resets the sequences.
+        await db.execute(`
+            TRUNCATE payroll_versions, payroll_items, payroll, leave_requests, advance_requests,
+                     notifications, audit_log, password_resets, teachers, accountants,
+                     users, salary_structures, system_config, counters
+            RESTART IDENTITY CASCADE
+        `);
 
-        await createUserWithUsername({
-            username: admin.username,
-            password: await pwService.hash(admin.password),
-            role: 'admin',
-            fullName: 'System Administrator',
-            email: '',
-            phone: '',
-            isActive: true,
-            mustChangePassword: true,
-            passwordSetupCompleted: true,
-            mfaEnabled: false,
-            mfaMethod: 'email',
-            tokenVersion: 0
-        });
+        const pwService = require('../server/services/passwords');
+        const configService = require('../server/services/config');
+
+        await configService.ensureDefaults();
+
+        await db.execute(
+            `INSERT INTO salary_structures
+                 (salary_scale, basic_salary, housing_allowance, transport_allowance, medical_allowance)
+             VALUES ('Scale_1', 800000, 100000, 50000, 30000)`
+        );
+
+        await db.execute(
+            `INSERT INTO users (
+                 username, password_hash, role, full_name,
+                 is_active, must_change_password, password_setup_completed, mfa_enabled, token_version
+             ) VALUES ($1, $2, 'admin', 'System Administrator', TRUE, TRUE, TRUE, FALSE, 0)`,
+            [admin.username, await pwService.hash(admin.password)]
+        );
 
         const { app } = require('../server/server');
         server = http.createServer(app);
@@ -111,7 +111,10 @@ suite('EduPay payroll workflow', () => {
         base = `http://127.0.0.1:${server.address().port}`;
     });
 
-    test.after(() => new Promise(resolve => server.close(resolve)));
+    test.after(async () => {
+        await new Promise(resolve => server.close(resolve));
+        await require('../server/db').close();
+    });
 
     test('the seeded administrator must change their password before doing anything', async () => {
         const session = await login(admin.username, admin.password);
@@ -391,7 +394,7 @@ suite('EduPay payroll workflow', () => {
         assert.equal(res.status, 201, JSON.stringify(res.body));
 
         payrollId = res.body.payrollId;
-        assert.equal(payrollId, '2026-06', 'the run is keyed by its period');
+        assert.ok(Number.isInteger(payrollId), 'the run has a numeric primary key');
         assert.equal(res.body.version, 1);
         assert.ok(res.body.employeeCount >= 1);
 
@@ -415,7 +418,8 @@ suite('EduPay payroll workflow', () => {
             body: { month: 6, year: 2026 }
         });
         assert.equal(again.status, 201);
-        assert.equal(again.body.payrollId, payrollId, 'the same period must reuse the same document');
+        assert.equal(again.body.payrollId, payrollId,
+            'the UNIQUE (month, year) constraint must force the same row to be reused');
         assert.equal(again.body.version, 2, 'the run is versioned, not duplicated');
 
         // The superseded version is archived rather than deleted.

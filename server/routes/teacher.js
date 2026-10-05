@@ -1,10 +1,7 @@
 const express = require('express');
 const router = express.Router();
 
-const {
-    users, teachers, salaryStructures, payroll, payrollItems, leaveRequests,
-    advanceRequests, serverTimestamp, docData, docsData
-} = require('../firebase');
+const db = require('../db');
 const {
     authenticateToken, authorizeRoles, requirePasswordChanged, asyncHandler, HttpError
 } = require('../middleware');
@@ -15,21 +12,55 @@ const advanceService = require('../services/advances');
 const documents = require('../services/documents');
 const notify = require('../services/notifications');
 const { logAudit } = require('../services/audit');
+const { calculatePayrollItem } = require('../services/payroll-calculator');
 const { round2 } = require('../services/tax');
 
 router.use(authenticateToken, authorizeRoles('teacher'), requirePasswordChanged);
 
-/** Resolve the signed-in teacher's own record. */
+/** Resolve the signed-in teacher's own record, with their salary structure. */
 async function currentTeacher(req) {
-    const snap = await teachers().where('userId', '==', req.user.id).limit(1).get();
-    if (snap.empty) {
-        throw new HttpError(
-            404,
-            'No teacher record is linked to your account. Please contact HR.',
-            'TEACHER_PROFILE_MISSING'
-        );
+    const teacher = await db.queryOne(
+        `SELECT t.*, s.salary_scale AS structure_scale, s.basic_salary,
+                s.housing_allowance, s.transport_allowance, s.medical_allowance,
+                s.other_allowance, s.tax_percentage, s.nssf_percentage,
+                s.loan_deduction, s.other_deduction
+           FROM teachers t
+           LEFT JOIN salary_structures s ON s.salary_scale = t.salary_scale
+          WHERE t.user_id = $1`,
+        [req.user.id]
+    );
+
+    if (!teacher) {
+        throw new HttpError(404,
+            'No teacher record is linked to your account. Please contact HR.', 'TEACHER_PROFILE_MISSING');
     }
-    return docData(snap.docs[0]);
+    return teacher;
+}
+
+/** The structure fields, separated from the teacher row the join produced. */
+const structureOf = (teacher) => ({
+    basicSalary: teacher.basicSalary,
+    housingAllowance: teacher.housingAllowance,
+    transportAllowance: teacher.transportAllowance,
+    medicalAllowance: teacher.medicalAllowance,
+    otherAllowance: teacher.otherAllowance,
+    taxPercentage: teacher.taxPercentage,
+    nssfPercentage: teacher.nssfPercentage,
+    loanDeduction: teacher.loanDeduction,
+    otherDeduction: teacher.otherDeduction
+});
+
+/** Rough net pay, used only to size the advance ceiling. */
+function estimateNetPay(teacher, config) {
+    if (!teacher.structureScale) return 0;
+
+    const now = new Date();
+    const line = calculatePayrollItem(
+        { id: teacher.id, fullName: '', employeeId: '', salaryScale: teacher.salaryScale },
+        structureOf(teacher),
+        { month: now.getMonth() + 1, year: now.getFullYear(), config, advanceDeduction: 0, unpaidLeaveDays: 0 }
+    );
+    return line.netSalary;
 }
 
 // ===========================================================================
@@ -38,10 +69,7 @@ async function currentTeacher(req) {
 
 router.get('/profile', asyncHandler(async (req, res) => {
     const teacher = await currentTeacher(req);
-    const [structure, config] = await Promise.all([
-        salaryStructures().doc(teacher.salaryScale).get().then(docData),
-        configService.getConfig()
-    ]);
+    const config = await configService.getConfig();
 
     const balance = await leaveService.getBalance(teacher.id, {
         entitlementDays: teacher.leaveEntitlementDays ?? config.defaultAnnualLeaveDays
@@ -50,13 +78,7 @@ router.get('/profile', asyncHandler(async (req, res) => {
     res.json({
         ...teacher,
         currency: config.currency,
-        basicSalary: Number(structure?.basicSalary) || 0,
-        housingAllowance: Number(structure?.housingAllowance) || 0,
-        transportAllowance: Number(structure?.transportAllowance) || 0,
-        medicalAllowance: Number(structure?.medicalAllowance) || 0,
-        otherAllowance: Number(structure?.otherAllowance) || 0,
-        nssfPercentage: Number(structure?.nssfPercentage) || 0,
-        scaleMissing: !structure,
+        scaleMissing: !teacher.structureScale,
         leaveBalance: balance
     });
 }));
@@ -69,52 +91,85 @@ router.get('/profile', asyncHandler(async (req, res) => {
  */
 router.put('/profile', asyncHandler(async (req, res) => {
     const teacher = await currentTeacher(req);
-    const updates = { updatedAt: serverTimestamp() };
 
-    if (req.body.phone !== undefined) updates.phone = v.str(req.body.phone, 'Phone', { required: false, max: 32 }) || '';
-    if (req.body.email !== undefined) updates.email = v.email(req.body.email, 'Email', { required: false }) || '';
+    const phone = req.body.phone !== undefined
+        ? v.str(req.body.phone, 'Phone', { required: false, max: 32 }) : undefined;
+    const emailAddress = req.body.email !== undefined
+        ? v.email(req.body.email, 'Email', { required: false }) : undefined;
 
     const method = req.body.paymentMethod ?? req.body.payment_method;
+    let payment = null;
+
     if (method !== undefined) {
         const paymentMethod = v.oneOf(method, ['bank', 'mobile_money'], 'Payment method');
-        updates.paymentMethod = paymentMethod;
 
-        if (paymentMethod === 'mobile_money') {
-            updates.mobileMoneyProvider = v.str(req.body.mobileMoneyProvider ?? req.body.mobile_money_provider, 'Mobile money provider', { max: 60 });
-            updates.mobileMoneyNumber = v.str(req.body.mobileMoneyNumber ?? req.body.mobile_money_number, 'Mobile money number', { max: 32 });
-            updates.bankName = null;
-            updates.bankAccountName = null;
-            updates.bankAccountNumber = null;
-        } else {
-            updates.bankName = v.str(req.body.bankName ?? req.body.bank_name, 'Bank name', { max: 80 });
-            updates.bankAccountName = v.str(req.body.bankAccountName ?? req.body.bank_account_name, 'Account name', { max: 80 });
-            updates.bankAccountNumber = v.str(req.body.bankAccountNumber ?? req.body.bank_account_number, 'Account number', { max: 40 });
-            updates.mobileMoneyProvider = null;
-            updates.mobileMoneyNumber = null;
+        payment = paymentMethod === 'mobile_money'
+            ? {
+                paymentMethod,
+                mobileMoneyProvider: v.str(req.body.mobileMoneyProvider ?? req.body.mobile_money_provider,
+                    'Mobile money provider', { max: 60 }),
+                mobileMoneyNumber: v.str(req.body.mobileMoneyNumber ?? req.body.mobile_money_number,
+                    'Mobile money number', { max: 32 }),
+                bankName: null, bankAccountName: null, bankAccountNumber: null
+            }
+            : {
+                paymentMethod,
+                bankName: v.str(req.body.bankName ?? req.body.bank_name, 'Bank name', { max: 80 }),
+                bankAccountName: v.str(req.body.bankAccountName ?? req.body.bank_account_name,
+                    'Account name', { max: 80 }),
+                bankAccountNumber: v.str(req.body.bankAccountNumber ?? req.body.bank_account_number,
+                    'Account number', { max: 40 }),
+                mobileMoneyProvider: null, mobileMoneyNumber: null
+            };
+    }
+
+    await db.withTransaction(async (client) => {
+        await client.query(
+            `UPDATE teachers
+                SET phone = CASE WHEN $1::boolean THEN $2 ELSE phone END,
+                    email = CASE WHEN $3::boolean THEN $4 ELSE email END
+              WHERE id = $5`,
+            [phone !== undefined, phone || null, emailAddress !== undefined, emailAddress || null, teacher.id]
+        );
+
+        if (payment) {
+            await client.query(
+                `UPDATE teachers
+                    SET payment_method = $1, bank_name = $2, bank_account_name = $3,
+                        bank_account_number = $4, mobile_money_provider = $5, mobile_money_number = $6
+                  WHERE id = $7`,
+                [payment.paymentMethod, payment.bankName, payment.bankAccountName,
+                    payment.bankAccountNumber, payment.mobileMoneyProvider,
+                    payment.mobileMoneyNumber, teacher.id]
+            );
         }
-    }
 
-    await teachers().doc(teacher.id).update(updates);
-
-    if (updates.phone !== undefined || updates.email !== undefined) {
-        await users().doc(req.user.id).update({
-            ...(updates.phone !== undefined ? { phone: updates.phone } : {}),
-            ...(updates.email !== undefined ? { email: updates.email } : {}),
-            updatedAt: serverTimestamp()
-        });
-    }
+        if (phone !== undefined || emailAddress !== undefined) {
+            await client.query(
+                `UPDATE users
+                    SET phone = CASE WHEN $1::boolean THEN $2 ELSE phone END,
+                        email = CASE WHEN $3::boolean THEN $4 ELSE email END
+                  WHERE id = $5`,
+                [phone !== undefined, phone || null,
+                    emailAddress !== undefined, emailAddress || null, req.user.id]
+            );
+        }
+    });
 
     // A change of payment destination is security-relevant, so notify HR.
-    if (method !== undefined) {
+    if (payment) {
         await notify.notifyRoles(['hr'], {
             title: 'Teacher changed their payment details',
             message: `${teacher.fullName} (${teacher.employeeId}) changed their payment destination to `
-                + `${updates.paymentMethod === 'mobile_money' ? 'mobile money' : 'a bank account'}. Verify before the next payment run.`,
+                + `${payment.paymentMethod === 'mobile_money' ? 'mobile money' : 'a bank account'}. `
+                + 'Verify before the next payment run.',
             category: notify.CATEGORIES.account,
             severity: 'warning',
             actorId: req.user.id
         });
-        logAudit(req.user, 'UPDATE_PAYMENT_DETAILS', `Changed own payment destination to ${updates.paymentMethod}`, req.ip);
+
+        logAudit(req.user, 'UPDATE_PAYMENT_DETAILS',
+            `Changed own payment destination to ${payment.paymentMethod}`, req.ip);
     }
 
     res.json({ message: 'Your details have been updated.' });
@@ -127,46 +182,40 @@ router.put('/profile', asyncHandler(async (req, res) => {
 router.get('/payslips', asyncHandler(async (req, res) => {
     const teacher = await currentTeacher(req);
 
-    const snap = await payrollItems()
-        .where('teacherId', '==', teacher.id)
-        .where('superseded', '==', false)
-        .get();
-
-    const items = docsData(snap);
-    const runs = await Promise.all([...new Set(items.map(i => i.payrollId))]
-        .map(id => payroll().doc(id).get().then(docData)));
-    const runMap = new Map(runs.filter(Boolean).map(r => [r.id, r]));
-
     // Only released runs are visible to the employee.
-    const visible = items
-        .filter(item => ['approved', 'paid'].includes(runMap.get(item.payrollId)?.status))
-        .map(item => ({
-            ...item,
-            payrollStatus: runMap.get(item.payrollId).status,
-            periodLabel: runMap.get(item.payrollId).periodLabel || `${item.month}/${item.year}`
-        }))
-        .sort((a, b) => (b.year - a.year) || (b.month - a.month));
-
-    res.json(visible);
+    res.json(await db.query(
+        `SELECT pi.*, p.status AS payroll_status,
+                to_char(make_date(pi.year, pi.month, 1), 'FMMonth YYYY') AS period_label
+           FROM payroll_items pi
+           JOIN payroll p ON p.id = pi.payroll_id
+          WHERE pi.teacher_id = $1
+            AND NOT pi.superseded
+            AND p.status IN ('approved', 'paid')
+          ORDER BY pi.year DESC, pi.month DESC`,
+        [teacher.id]
+    ));
 }));
 
 router.get('/payslip/:id/pdf', asyncHandler(async (req, res) => {
     const teacher = await currentTeacher(req);
-    const itemId = v.docId(req.params.id, 'Payslip id');
+    const itemId = v.num(req.params.id, 'Payslip id', { integer: true, min: 1 });
 
-    const item = docData(await payrollItems().doc(itemId).get());
+    // Ownership is part of the query: a teacher can only ever match their own row.
+    const item = await db.queryOne(
+        `SELECT pi.*, p.status AS payroll_status
+           FROM payroll_items pi
+           JOIN payroll p ON p.id = pi.payroll_id
+          WHERE pi.id = $1 AND pi.teacher_id = $2`,
+        [itemId, teacher.id]
+    );
+    if (!item) throw new HttpError(404, 'Payslip not found.', 'NOT_FOUND');
 
-    // Ownership check: a teacher may only ever download their own payslip.
-    if (!item || item.teacherId !== teacher.id) {
-        throw new HttpError(404, 'Payslip not found.', 'NOT_FOUND');
-    }
-
-    const run = docData(await payroll().doc(item.payrollId).get());
-    if (!run || !['approved', 'paid'].includes(run.status)) {
+    if (!['approved', 'paid'].includes(item.payrollStatus)) {
         throw new HttpError(403, 'This payslip has not been released yet.', 'NOT_RELEASED');
     }
 
     const config = await configService.getConfig();
+
     documents.streamPayslipPdf(res, {
         ...item,
         position: teacher.position,
@@ -182,29 +231,15 @@ router.get('/payslip/:id/pdf', asyncHandler(async (req, res) => {
 router.get('/salary-history', asyncHandler(async (req, res) => {
     const teacher = await currentTeacher(req);
 
-    const snap = await payrollItems()
-        .where('teacherId', '==', teacher.id)
-        .where('superseded', '==', false)
-        .get();
-
-    const rows = docsData(snap)
-        .map(item => ({
-            payrollId: item.payrollId,
-            month: item.month,
-            year: item.year,
-            grossSalary: item.grossSalary,
-            totalDeductions: item.totalDeductions,
-            netSalary: item.netSalary,
-            taxAmount: item.taxAmount,
-            nssfAmount: item.nssfAmount,
-            advanceDeduction: item.advanceDeduction,
-            unpaidLeaveDays: item.unpaidLeaveDays,
-            paymentStatus: item.paymentStatus,
-            createdAt: item.createdAt
-        }))
-        .sort((a, b) => (b.year - a.year) || (b.month - a.month));
-
-    res.json(rows);
+    res.json(await db.query(
+        `SELECT payroll_id, month, year, gross_salary, total_deductions, net_salary,
+                tax_amount, nssf_amount, advance_deduction, unpaid_leave_days,
+                payment_status, created_at
+           FROM payroll_items
+          WHERE teacher_id = $1 AND NOT superseded
+          ORDER BY year DESC, month DESC`,
+        [teacher.id]
+    ));
 }));
 
 // ===========================================================================
@@ -215,18 +250,21 @@ router.get('/leave', asyncHandler(async (req, res) => {
     const teacher = await currentTeacher(req);
     const config = await configService.getConfig();
 
-    const [snap, balance] = await Promise.all([
-        leaveRequests().where('teacherId', '==', teacher.id).orderBy('createdAt', 'desc').limit(100).get(),
+    const [requests, balance] = await Promise.all([
+        db.query(
+            `SELECT * FROM leave_requests WHERE teacher_id = $1 ORDER BY created_at DESC LIMIT 100`,
+            [teacher.id]
+        ),
         leaveService.getBalance(teacher.id, {
             entitlementDays: teacher.leaveEntitlementDays ?? config.defaultAnnualLeaveDays
         })
     ]);
 
     res.json({
-        requests: docsData(snap).map(r => ({ ...r, isUnpaid: leaveService.isUnpaid(r.leaveType) })),
+        requests,
         balance,
-        leaveTypes: Object.entries(leaveService.LEAVE_TYPES).map(([key, meta]) => ({
-            value: key, label: meta.label, paid: meta.paid
+        leaveTypes: Object.entries(leaveService.LEAVE_TYPES).map(([value, meta]) => ({
+            value, label: meta.label, paid: meta.paid
         }))
     });
 }));
@@ -235,80 +273,85 @@ router.post('/leave', asyncHandler(async (req, res) => {
     const teacher = await currentTeacher(req);
     const config = await configService.getConfig();
 
-    const leaveType = v.oneOf(req.body.leaveType ?? req.body.leave_type, Object.keys(leaveService.LEAVE_TYPES), 'Leave type');
+    const leaveType = v.oneOf(req.body.leaveType ?? req.body.leave_type,
+        Object.keys(leaveService.LEAVE_TYPES), 'Leave type');
     const startDate = v.isoDate(req.body.startDate ?? req.body.start_date, 'Start date');
     const endDate = v.isoDate(req.body.endDate ?? req.body.end_date, 'End date');
     const reason = v.str(req.body.reason, 'Reason', { min: 3, max: 500 });
 
     const days = leaveService.validateRange(startDate, endDate);
+    const isUnpaid = leaveService.isUnpaid(leaveType);
+
+    // Reported here for a clearer message; the leave_no_overlap exclusion
+    // constraint is what actually guarantees it, even under concurrency.
     await leaveService.assertNoOverlap(teacher.id, startDate, endDate);
 
-    const entitlementDays = teacher.leaveEntitlementDays ?? config.defaultAnnualLeaveDays;
-    const balance = await leaveService.getBalance(teacher.id, {
-        entitlementDays,
-        year: new Date(`${startDate}T00:00:00Z`).getUTCFullYear()
-    });
+    if (!isUnpaid) {
+        const balance = await leaveService.getBalance(teacher.id, {
+            entitlementDays: teacher.leaveEntitlementDays ?? config.defaultAnnualLeaveDays,
+            year: new Date(`${startDate}T00:00:00Z`).getUTCFullYear()
+        });
 
-    if (!leaveService.isUnpaid(leaveType) && days > balance.remainingDays) {
-        throw new HttpError(
-            400,
-            `You have ${balance.remainingDays} paid leave day(s) left in ${balance.year} but asked for ${days}. `
-            + 'Reduce the dates, or submit it as unpaid leave.',
-            'INSUFFICIENT_LEAVE_BALANCE'
-        );
+        if (days > balance.remainingDays) {
+            throw new HttpError(400,
+                `You have ${balance.remainingDays} paid leave day(s) left in ${balance.year} but asked `
+                + `for ${days}. Reduce the dates, or submit it as unpaid leave.`,
+                'INSUFFICIENT_LEAVE_BALANCE');
+        }
     }
 
-    const ref = await leaveRequests().add({
-        teacherId: teacher.id,
-        teacherName: teacher.fullName,
-        employeeId: teacher.employeeId,
-        leaveType,
-        startDate,
-        endDate,
-        days,
-        reason,
-        isUnpaid: leaveService.isUnpaid(leaveType),
-        status: 'Pending',
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
-    });
+    const created = await db.queryOne(
+        `INSERT INTO leave_requests
+             (teacher_id, teacher_name, employee_id, leave_type, start_date, end_date, reason, is_unpaid)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+         RETURNING id, days`,
+        [teacher.id, teacher.fullName, teacher.employeeId, leaveType, startDate, endDate, reason, isUnpaid]
+    );
 
     // HR is told immediately — this is the signal that was previously missing.
     await notify.notifyRoles(['hr'], {
         title: 'New leave request',
-        message: `${teacher.fullName} (${teacher.employeeId}) requested ${days} day(s) of `
+        message: `${teacher.fullName} (${teacher.employeeId}) requested ${created.days} day(s) of `
             + `${leaveType.toLowerCase()} leave from ${startDate} to ${endDate}.`,
         category: notify.CATEGORIES.leave,
-        severity: 'info',
         actorId: req.user.id
     });
 
-    logAudit(req.user, 'CREATE_LEAVE_REQUEST', `Requested ${days} day(s) of ${leaveType} leave (${startDate} to ${endDate})`, req.ip);
+    logAudit(req.user, 'CREATE_LEAVE_REQUEST',
+        `Requested ${created.days} day(s) of ${leaveType} leave (${startDate} to ${endDate})`, req.ip);
 
     res.status(201).json({
         message: 'Your leave request has been submitted to HR.',
-        id: ref.id,
-        days,
-        isUnpaid: leaveService.isUnpaid(leaveType)
+        id: Number(created.id),
+        days: Number(created.days),
+        isUnpaid
     });
 }));
 
 /** Withdraw a request that has not been decided yet. */
 router.post('/leave/:id/cancel', asyncHandler(async (req, res) => {
     const teacher = await currentTeacher(req);
-    const requestId = v.docId(req.params.id, 'Leave request id');
+    const requestId = v.num(req.params.id, 'Leave request id', { integer: true, min: 1 });
 
-    const request = docData(await leaveRequests().doc(requestId).get());
-    if (!request || request.teacherId !== teacher.id) throw new HttpError(404, 'Leave request not found.', 'NOT_FOUND');
-    if (request.status !== 'Pending') {
-        throw new HttpError(400, `This request has already been ${request.status.toLowerCase()} and cannot be withdrawn.`, 'ALREADY_DECIDED');
+    // Ownership and state are both in the WHERE clause, so this cannot cancel
+    // someone else's request or one that has already been decided.
+    const affected = await db.execute(
+        `UPDATE leave_requests
+            SET status = 'Cancelled', cancelled_at = now()
+          WHERE id = $1 AND teacher_id = $2 AND status = 'Pending'`,
+        [requestId, teacher.id]
+    );
+
+    if (!affected) {
+        const existing = await db.queryOne(
+            'SELECT status FROM leave_requests WHERE id = $1 AND teacher_id = $2',
+            [requestId, teacher.id]
+        );
+        if (!existing) throw new HttpError(404, 'Leave request not found.', 'NOT_FOUND');
+        throw new HttpError(400,
+            `This request has already been ${String(existing.status).toLowerCase()} and cannot be withdrawn.`,
+            'ALREADY_DECIDED');
     }
-
-    await leaveRequests().doc(requestId).update({
-        status: 'Cancelled',
-        cancelledAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
-    });
 
     logAudit(req.user, 'CANCEL_LEAVE_REQUEST', `Withdrew leave request ${requestId}`, req.ip);
     res.json({ message: 'Your leave request has been withdrawn.' });
@@ -322,19 +365,16 @@ router.get('/advances', asyncHandler(async (req, res) => {
     const teacher = await currentTeacher(req);
     const config = await configService.getConfig();
 
-    const [snap, structure] = await Promise.all([
-        advanceRequests().where('teacherId', '==', teacher.id).orderBy('createdAt', 'desc').limit(50).get(),
-        salaryStructures().doc(teacher.salaryScale).get().then(docData)
-    ]);
+    const rows = await db.query(
+        `SELECT *, (amount - amount_repaid) AS outstanding
+           FROM advance_requests WHERE teacher_id = $1 ORDER BY created_at DESC LIMIT 50`,
+        [teacher.id]
+    );
 
-    const estimatedNet = estimateNetPay(structure, config);
+    const estimatedNet = estimateNetPay(teacher, config);
 
     res.json({
-        requests: docsData(snap).map(advance => ({
-            ...advance,
-            outstanding: round2(Math.max(0, Number(advance.amount || 0) - Number(advance.amountRepaid || 0))),
-            instalmentAmount: advanceService.instalmentAmount(advance)
-        })),
+        requests: rows.map(row => ({ ...row, instalmentAmount: advanceService.instalmentAmount(row) })),
         limits: {
             maxAmount: advanceService.maxAdvanceFor(estimatedNet, config),
             maxAdvancePercentage: config.maxAdvancePercentage,
@@ -345,94 +385,83 @@ router.get('/advances', asyncHandler(async (req, res) => {
     });
 }));
 
-/** Rough net pay, used only to size the advance ceiling. */
-function estimateNetPay(structure, config) {
-    if (!structure) return 0;
-    const { calculatePayrollItem } = require('../services/payroll-calculator');
-    const now = new Date();
-    const line = calculatePayrollItem(
-        { id: 'estimate', fullName: '', employeeId: '', salaryScale: '' },
-        structure,
-        { month: now.getMonth() + 1, year: now.getFullYear(), config, advanceDeduction: 0, unpaidLeaveDays: 0 }
-    );
-    return line.netSalary;
-}
-
 router.post('/advances', asyncHandler(async (req, res) => {
     const teacher = await currentTeacher(req);
     const config = await configService.getConfig();
 
     const amount = v.num(req.body.amount, 'Amount', { min: 1, max: 1e12 });
     const reason = v.str(req.body.reason, 'Reason', { min: 3, max: 500 });
-    const instalments = v.num(req.body.instalments, 'Instalments', {
-        required: false, min: 1, max: config.maxAdvanceInstalments, integer: true
-    }) ?? 1;
+    const instalments = v.num(req.body.instalments, 'Instalments',
+        { required: false, min: 1, max: config.maxAdvanceInstalments, integer: true }) ?? 1;
 
+    // Reported here for a clearer message; the advance_one_open_per_teacher
+    // partial unique index is what actually guarantees it.
     await advanceService.assertNoOpenRequest(teacher.id);
+
+    if (!teacher.structureScale) {
+        throw new HttpError(400,
+            'Your salary scale is not configured yet, so an advance cannot be assessed. Contact HR.',
+            'NO_SALARY_STRUCTURE');
+    }
 
     // Cap the request against actual pay, so an advance can never exceed what can
     // realistically be recovered.
-    const structure = docData(await salaryStructures().doc(teacher.salaryScale).get());
-    if (!structure) {
-        throw new HttpError(400, 'Your salary scale is not configured yet, so an advance cannot be assessed. Contact HR.', 'NO_SALARY_STRUCTURE');
-    }
-
-    const estimatedNet = estimateNetPay(structure, config);
-    const maxAmount = advanceService.maxAdvanceFor(estimatedNet * instalments, config);
-
+    const maxAmount = advanceService.maxAdvanceFor(estimateNetPay(teacher, config) * instalments, config);
     if (amount > maxAmount) {
-        throw new HttpError(
-            400,
-            `The most you can request over ${instalments} instalment(s) is ${config.currency} ${maxAmount.toLocaleString()} `
-            + `(${config.maxAdvancePercentage}% of net pay). Reduce the amount or spread it over more instalments.`,
-            'ADVANCE_EXCEEDS_LIMIT'
-        );
+        throw new HttpError(400,
+            `The most you can request over ${instalments} instalment(s) is `
+            + `${config.currency} ${maxAmount.toLocaleString()} (${config.maxAdvancePercentage}% of net pay). `
+            + 'Reduce the amount or spread it over more instalments.',
+            'ADVANCE_EXCEEDS_LIMIT');
     }
 
-    const ref = await advanceRequests().add({
-        teacherId: teacher.id,
-        teacherName: teacher.fullName,
-        employeeId: teacher.employeeId,
-        amount: round2(amount),
-        reason,
-        requestedInstalments: instalments,
-        instalments,
-        amountRepaid: 0,
-        instalmentsPaid: 0,
-        status: 'Pending',
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
-    });
+    const created = await db.queryOne(
+        `INSERT INTO advance_requests
+             (teacher_id, teacher_name, employee_id, amount, reason, requested_instalments, instalments)
+         VALUES ($1,$2,$3,$4,$5,$6,$6)
+         RETURNING id`,
+        [teacher.id, teacher.fullName, teacher.employeeId, round2(amount), reason, instalments]
+    );
 
     await notify.notifyRoles(['hr'], {
         title: 'New salary advance request',
         message: `${teacher.fullName} (${teacher.employeeId}) requested an advance of `
-            + `${config.currency} ${round2(amount).toLocaleString()} over ${instalments} instalment(s). Reason: ${reason}`,
+            + `${config.currency} ${round2(amount).toLocaleString()} over ${instalments} instalment(s). `
+            + `Reason: ${reason}`,
         category: notify.CATEGORIES.advance,
-        severity: 'info',
         actorId: req.user.id
     });
 
-    logAudit(req.user, 'CREATE_ADVANCE_REQUEST', `Requested an advance of ${amount} over ${instalments} instalment(s)`, req.ip);
+    logAudit(req.user, 'CREATE_ADVANCE_REQUEST',
+        `Requested an advance of ${amount} over ${instalments} instalment(s)`, req.ip);
 
-    res.status(201).json({ message: 'Your advance request has been submitted to HR.', id: ref.id });
+    res.status(201).json({
+        message: 'Your advance request has been submitted to HR.',
+        id: Number(created.id)
+    });
 }));
 
 router.post('/advances/:id/cancel', asyncHandler(async (req, res) => {
     const teacher = await currentTeacher(req);
-    const advanceId = v.docId(req.params.id, 'Advance id');
+    const advanceId = v.num(req.params.id, 'Advance id', { integer: true, min: 1 });
 
-    const advance = docData(await advanceRequests().doc(advanceId).get());
-    if (!advance || advance.teacherId !== teacher.id) throw new HttpError(404, 'Advance request not found.', 'NOT_FOUND');
-    if (advance.status !== 'Pending') {
-        throw new HttpError(400, `This advance is already ${advance.status.toLowerCase()} and cannot be withdrawn.`, 'ALREADY_DECIDED');
+    const affected = await db.execute(
+        `UPDATE advance_requests
+            SET status = 'Cancelled', cancelled_at = now()
+          WHERE id = $1 AND teacher_id = $2 AND status = 'Pending'`,
+        [advanceId, teacher.id]
+    );
+
+    if (!affected) {
+        const existing = await db.queryOne(
+            'SELECT status FROM advance_requests WHERE id = $1 AND teacher_id = $2',
+            [advanceId, teacher.id]
+        );
+        if (!existing) throw new HttpError(404, 'Advance request not found.', 'NOT_FOUND');
+        throw new HttpError(400,
+            `This advance is already ${String(existing.status).toLowerCase()} and cannot be withdrawn.`,
+            'ALREADY_DECIDED');
     }
-
-    await advanceRequests().doc(advanceId).update({
-        status: 'Cancelled',
-        cancelledAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
-    });
 
     logAudit(req.user, 'CANCEL_ADVANCE_REQUEST', `Withdrew advance request ${advanceId}`, req.ip);
     res.json({ message: 'Your advance request has been withdrawn.' });
@@ -446,41 +475,51 @@ router.get('/stats', asyncHandler(async (req, res) => {
     const teacher = await currentTeacher(req);
     const config = await configService.getConfig();
 
-    const [itemSnap, pendingLeave, openAdvance, unread, structure] = await Promise.all([
-        payrollItems().where('teacherId', '==', teacher.id).where('superseded', '==', false).get(),
-        leaveRequests().where('teacherId', '==', teacher.id).where('status', '==', 'Pending').count().get(),
-        advanceRequests().where('teacherId', '==', teacher.id).where('status', 'in', advanceService.OPEN_STATUSES).get(),
-        notify.unreadCount(req.user.id),
-        salaryStructures().doc(teacher.salaryScale).get().then(docData)
-    ]);
+    const stats = await db.queryOne(
+        `SELECT
+             (SELECT count(*) FROM payroll_items
+               WHERE teacher_id = $1 AND NOT superseded)                        AS payslip_count,
+             (SELECT COALESCE(SUM(net_salary), 0) FROM payroll_items
+               WHERE teacher_id = $1 AND NOT superseded AND payment_status = 'Paid') AS total_earned,
+             (SELECT count(*) FROM leave_requests
+               WHERE teacher_id = $1 AND status = 'Pending')                    AS pending_leave_count,
+             (SELECT COALESCE(SUM(amount - amount_repaid), 0) FROM advance_requests
+               WHERE teacher_id = $1 AND status IN ('Pending','Approved','Repaying')) AS advance_outstanding,
+             (SELECT count(*) FROM notifications
+               WHERE user_id = $2 AND NOT is_read)                              AS unread_notifications`,
+        [teacher.id, req.user.id]
+    );
 
-    const items = docsData(itemSnap).sort((a, b) => (b.year - a.year) || (b.month - a.month));
-    const paid = items.filter(i => i.paymentStatus === 'Paid');
-    const openAdvances = docsData(openAdvance);
+    const latest = await db.queryOne(
+        `SELECT net_salary, month, year FROM payroll_items
+          WHERE teacher_id = $1 AND NOT superseded
+          ORDER BY year DESC, month DESC LIMIT 1`,
+        [teacher.id]
+    );
 
     const balance = await leaveService.getBalance(teacher.id, {
         entitlementDays: teacher.leaveEntitlementDays ?? config.defaultAnnualLeaveDays
     });
 
+    const gross = teacher.structureScale
+        ? round2(Number(teacher.basicSalary || 0) + Number(teacher.housingAllowance || 0)
+            + Number(teacher.transportAllowance || 0) + Number(teacher.medicalAllowance || 0)
+            + Number(teacher.otherAllowance || 0))
+        : 0;
+
     res.json({
         currency: config.currency,
         payrollHalted: Boolean(teacher.payrollHalted),
         payrollHaltReason: teacher.payrollHaltReason || null,
-        latestNetSalary: items[0]?.netSalary ?? 0,
-        latestPeriod: items[0] ? `${items[0].month}/${items[0].year}` : null,
-        totalEarnedToDate: round2(paid.reduce((sum, i) => sum + Number(i.netSalary || 0), 0)),
-        payslipCount: items.length,
-        pendingLeaveCount: pendingLeave.data().count,
+        latestNetSalary: latest ? round2(latest.netSalary) : 0,
+        latestPeriod: latest ? `${latest.month}/${latest.year}` : null,
+        totalEarnedToDate: round2(stats.totalEarned),
+        payslipCount: Number(stats.payslipCount),
+        pendingLeaveCount: Number(stats.pendingLeaveCount),
         leaveBalance: balance,
-        advanceOutstanding: round2(openAdvances.reduce(
-            (sum, a) => sum + Math.max(0, Number(a.amount || 0) - Number(a.amountRepaid || 0)), 0
-        )),
-        unreadNotifications: unread,
-        currentGross: structure
-            ? round2(Number(structure.basicSalary || 0) + Number(structure.housingAllowance || 0)
-                + Number(structure.transportAllowance || 0) + Number(structure.medicalAllowance || 0)
-                + Number(structure.otherAllowance || 0))
-            : 0
+        advanceOutstanding: round2(stats.advanceOutstanding),
+        unreadNotifications: Number(stats.unreadNotifications),
+        currentGross: gross
     });
 }));
 

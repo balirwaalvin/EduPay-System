@@ -3,9 +3,13 @@
  *
  * Leave used to be a bare record: no entitlement, no balance, no overlap check,
  * no validation that the end date followed the start date, and no effect on pay.
- * This module supplies the arithmetic the routes and payroll both need.
+ *
+ * Three of those are now database constraints — `leave_dates_ordered`,
+ * `leave_length_sane` and the `leave_no_overlap` exclusion constraint — so they
+ * hold even under concurrent requests. The validation kept here runs first
+ * purely to give a clearer message than a constraint violation would.
  */
-const { leaveRequests, docsData } = require('../firebase');
+const db = require('../db');
 const { HttpError } = require('../middleware');
 
 const LEAVE_TYPES = {
@@ -19,7 +23,6 @@ const LEAVE_TYPES = {
 };
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-
 const toUtc = (iso) => new Date(`${String(iso).slice(0, 10)}T00:00:00Z`);
 
 /** Inclusive day count between two ISO dates. */
@@ -32,7 +35,11 @@ function isUnpaid(leaveType) {
     return LEAVE_TYPES[leaveType] ? !LEAVE_TYPES[leaveType].paid : false;
 }
 
-/** Validate a requested range and return its day count. */
+/**
+ * Validate a requested range and return its day count.
+ * Policy checks that the schema does not express: how far back leave may be
+ * recorded, and how far ahead it may be booked.
+ */
 function validateRange(startIso, endIso, { maxDays = 120 } = {}) {
     const start = toUtc(startIso);
     const end = toUtc(endIso);
@@ -45,40 +52,41 @@ function validateRange(startIso, endIso, { maxDays = 120 } = {}) {
     if (days > maxDays) {
         throw new HttpError(400, `A single leave request cannot exceed ${maxDays} days.`, 'LEAVE_TOO_LONG');
     }
-
-    // Allow a little backdating for leave recorded after the fact, but not more.
-    const earliest = new Date(Date.now() - 90 * DAY_MS);
-    if (start < earliest) {
+    if (start < new Date(Date.now() - 90 * DAY_MS)) {
         throw new HttpError(400, 'Leave cannot start more than 90 days in the past.', 'LEAVE_TOO_OLD');
     }
-
-    const latest = new Date(Date.now() + 730 * DAY_MS);
-    if (start > latest) {
+    if (start > new Date(Date.now() + 730 * DAY_MS)) {
         throw new HttpError(400, 'Leave cannot start more than two years in the future.', 'LEAVE_TOO_FAR');
     }
 
     return days;
 }
 
-/** Reject a request that overlaps an existing pending or approved one. */
-async function assertNoOverlap(teacherId, startIso, endIso, { excludeId = null } = {}) {
-    const snap = await leaveRequests()
-        .where('teacherId', '==', teacherId)
-        .where('status', 'in', ['Pending', 'Approved'])
-        .get();
+/**
+ * Report an overlap before attempting the insert, so the message can name the
+ * clashing dates. The `leave_no_overlap` exclusion constraint is what actually
+ * guarantees it; this is for the wording.
+ */
+async function findOverlap(teacherId, startIso, endIso, { excludeId = null } = {}) {
+    return db.queryOne(
+        `SELECT id, start_date, end_date, status
+           FROM leave_requests
+          WHERE teacher_id = $1
+            AND status IN ('Pending', 'Approved')
+            AND daterange(start_date, end_date, '[]') && daterange($2::date, $3::date, '[]')
+            AND ($4::bigint IS NULL OR id <> $4)
+          LIMIT 1`,
+        [teacherId, startIso, endIso, excludeId]
+    );
+}
 
-    const start = toUtc(startIso);
-    const end = toUtc(endIso);
-
-    const clash = docsData(snap).find(existing => {
-        if (excludeId && existing.id === excludeId) return false;
-        return toUtc(existing.startDate) <= end && toUtc(existing.endDate) >= start;
-    });
-
+async function assertNoOverlap(teacherId, startIso, endIso, options = {}) {
+    const clash = await findOverlap(teacherId, startIso, endIso, options);
     if (clash) {
         throw new HttpError(
             409,
-            `This overlaps leave you already have from ${clash.startDate} to ${clash.endDate} (${clash.status.toLowerCase()}).`,
+            `This overlaps leave you already have from ${clash.startDate} to ${clash.endDate} `
+            + `(${String(clash.status).toLowerCase()}).`,
             'LEAVE_OVERLAP'
         );
     }
@@ -89,24 +97,22 @@ async function assertNoOverlap(teacherId, startIso, endIso, { excludeId = null }
  * Only paid types draw down the entitlement; unpaid leave reduces pay instead.
  */
 async function getBalance(teacherId, { entitlementDays, year = new Date().getFullYear() }) {
-    const snap = await leaveRequests()
-        .where('teacherId', '==', teacherId)
-        .where('status', 'in', ['Pending', 'Approved'])
-        .get();
+    const rows = await db.query(
+        `SELECT status, COALESCE(SUM(days), 0) AS days
+           FROM leave_requests
+          WHERE teacher_id = $1
+            AND NOT is_unpaid
+            AND status IN ('Pending', 'Approved')
+            AND EXTRACT(YEAR FROM start_date) = $2
+          GROUP BY status`,
+        [teacherId, year]
+    );
 
-    let approved = 0;
-    let pending = 0;
-
-    docsData(snap).forEach(request => {
-        if (toUtc(request.startDate).getUTCFullYear() !== Number(year)) return;
-        if (isUnpaid(request.leaveType)) return;
-
-        const days = Number(request.days || countDays(request.startDate, request.endDate));
-        if (request.status === 'Approved') approved += days;
-        else pending += days;
-    });
-
+    const byStatus = Object.fromEntries(rows.map(row => [row.status, Number(row.days)]));
+    const approved = byStatus.Approved || 0;
+    const pending = byStatus.Pending || 0;
     const entitlement = Number(entitlementDays) || 0;
+
     return {
         year: Number(year),
         entitlementDays: entitlement,
@@ -117,40 +123,48 @@ async function getBalance(teacherId, { entitlementDays, year = new Date().getFul
 }
 
 /**
- * Approved *unpaid* leave days falling inside a payroll period, used to abate
- * basic pay for that run.
+ * Approved *unpaid* leave days falling inside a payroll period, for every teacher
+ * in one query.
+ *
+ * Only the portion of each request that lies within the period counts, which the
+ * database computes with LEAST/GREATEST on the date bounds. The previous
+ * implementation issued one query per teacher and intersected the ranges in
+ * JavaScript.
  */
-async function unpaidDaysInPeriod(teacherId, month, year) {
-    const periodStart = new Date(Date.UTC(Number(year), Number(month) - 1, 1));
-    const periodEnd = new Date(Date.UTC(Number(year), Number(month), 0));
-
-    const snap = await leaveRequests()
-        .where('teacherId', '==', teacherId)
-        .where('status', '==', 'Approved')
-        .get();
-
-    return docsData(snap).reduce((total, request) => {
-        if (!isUnpaid(request.leaveType)) return total;
-
-        // Count only the portion of the request that lies within the period.
-        const start = toUtc(request.startDate);
-        const end = toUtc(request.endDate);
-        const overlapStart = start > periodStart ? start : periodStart;
-        const overlapEnd = end < periodEnd ? end : periodEnd;
-
-        if (overlapEnd < overlapStart) return total;
-        return total + Math.floor((overlapEnd - overlapStart) / DAY_MS) + 1;
-    }, 0);
-}
-
-/** Unpaid days for many teachers at once, as a Map of teacherId -> days. */
 async function unpaidDaysForPeriod(teacherIds, month, year) {
     const result = new Map();
-    const counts = await Promise.all(
-        teacherIds.map(id => unpaidDaysInPeriod(id, month, year).then(days => [id, days]))
+    if (!teacherIds.length) return result;
+
+    const rows = await db.query(
+        `WITH period AS (
+             SELECT make_date($2::int, $3::int, 1) AS starts,
+                    (make_date($2::int, $3::int, 1) + INTERVAL '1 month - 1 day')::date AS ends
+         )
+         SELECT lr.teacher_id,
+                SUM(
+                    (LEAST(lr.end_date, p.ends) - GREATEST(lr.start_date, p.starts)) + 1
+                ) AS days
+           FROM leave_requests lr
+          CROSS JOIN period p
+          WHERE lr.teacher_id = ANY($1::bigint[])
+            AND lr.status = 'Approved'
+            AND lr.is_unpaid
+            AND lr.start_date <= p.ends
+            AND lr.end_date >= p.starts
+          GROUP BY lr.teacher_id`,
+        [teacherIds, year, month]
     );
-    counts.forEach(([id, days]) => result.set(id, days));
+
+    for (const row of rows) {
+        result.set(Number(row.teacherId), Number(row.days) || 0);
+    }
     return result;
+}
+
+/** Unpaid days in a period for one teacher. */
+async function unpaidDaysInPeriod(teacherId, month, year) {
+    const map = await unpaidDaysForPeriod([teacherId], month, year);
+    return map.get(Number(teacherId)) || 0;
 }
 
 module.exports = {
@@ -158,6 +172,7 @@ module.exports = {
     countDays,
     isUnpaid,
     validateRange,
+    findOverlap,
     assertNoOverlap,
     getBalance,
     unpaidDaysInPeriod,

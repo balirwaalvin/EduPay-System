@@ -3,11 +3,15 @@
  *
  * Previously an approved advance was deducted in full from the next payroll, with
  * no ceiling relative to pay and no floor under net pay, so an advance larger
- * than someone's salary produced a negative payslip. Advances now have a cap and
- * an instalment schedule, and the calculator trims each instalment so net pay
- * cannot fall below the configured floor.
+ * than someone's salary produced a negative payslip.
+ *
+ * Advances now have a cap and an instalment schedule, and the calculator trims
+ * each instalment so net pay cannot fall below the configured floor. Two
+ * invariants are enforced by the schema rather than by application checks: at
+ * most one open advance per teacher (a partial unique index) and never repaying
+ * more than was advanced (a check constraint).
  */
-const { advanceRequests, docsData, serverTimestamp, FieldValue } = require('../firebase');
+const db = require('../db');
 const { round2 } = require('./tax');
 const { HttpError } = require('../middleware');
 
@@ -20,104 +24,126 @@ function maxAdvanceFor(estimatedNetPay, config) {
     return round2((Number(estimatedNetPay) || 0) * pct / 100);
 }
 
-/** Reject a second request while one is still outstanding. */
+/**
+ * Report an existing open advance before attempting the insert, so the message
+ * can say what state it is in. The `advance_one_open_per_teacher` index is what
+ * actually guarantees it.
+ */
 async function assertNoOpenRequest(teacherId) {
-    const snap = await advanceRequests()
-        .where('teacherId', '==', teacherId)
-        .where('status', 'in', OPEN_STATUSES)
-        .limit(1)
-        .get();
+    const existing = await db.queryOne(
+        `SELECT id, status FROM advance_requests
+          WHERE teacher_id = $1 AND status = ANY($2::text[])
+          LIMIT 1`,
+        [teacherId, OPEN_STATUSES]
+    );
 
-    if (!snap.empty) {
-        const existing = docsData(snap)[0];
+    if (existing) {
         throw new HttpError(
             409,
-            `You already have an advance that is ${existing.status.toLowerCase()}. It must be settled before you can request another.`,
+            `You already have an advance that is ${String(existing.status).toLowerCase()}. `
+            + 'It must be settled before you can request another.',
             'ADVANCE_ALREADY_OPEN'
         );
     }
 }
 
-/** Per-instalment amount for an advance. */
+/**
+ * Per-instalment amount for an advance.
+ * The final instalment settles the remainder so rounding cannot leave a tail.
+ */
 function instalmentAmount(advance) {
     const total = Number(advance.amount) || 0;
     const instalments = Math.max(1, Number(advance.instalments) || 1);
     const repaid = Number(advance.amountRepaid) || 0;
+
     const outstanding = round2(Math.max(0, total - repaid));
     if (outstanding <= 0) return 0;
 
-    const remainingInstalments = Math.max(1, instalments - Number(advance.instalmentsPaid || 0));
-    // Settle the remainder on the final instalment so rounding cannot leave a tail.
-    return remainingInstalments === 1 ? outstanding : round2(Math.min(outstanding, total / instalments));
+    const remaining = Math.max(1, instalments - Number(advance.instalmentsPaid || 0));
+    return remaining === 1 ? outstanding : round2(Math.min(outstanding, total / instalments));
 }
 
 /**
  * Advances due for deduction in the next payroll, as a Map of
  * teacherId -> { advanceId, amountDue, outstanding, ... }.
  */
-async function dueForPayroll(teacherIds) {
+async function dueForPayroll(teacherIds, client = null) {
     const result = new Map();
     if (!teacherIds.length) return result;
 
-    const snap = await advanceRequests()
-        .where('status', 'in', ['Approved', 'Repaying'])
-        .get();
+    const rows = await db.query(
+        `SELECT id, teacher_id, amount, instalments, amount_repaid, instalments_paid,
+                (amount - amount_repaid) AS outstanding
+           FROM advance_requests
+          WHERE teacher_id = ANY($1::bigint[])
+            AND status IN ('Approved', 'Repaying')
+            AND amount_repaid < amount`,
+        [teacherIds],
+        client
+    );
 
-    docsData(snap).forEach(advance => {
-        if (!teacherIds.includes(advance.teacherId)) return;
+    for (const row of rows) {
+        const amountDue = instalmentAmount(row);
+        if (amountDue <= 0) continue;
 
-        const amountDue = instalmentAmount(advance);
-        if (amountDue <= 0) return;
-
-        // Only one advance per teacher can be open, so the last write wins safely.
-        result.set(advance.teacherId, {
-            advanceId: advance.id,
+        result.set(Number(row.teacherId), {
+            advanceId: Number(row.id),
             amountDue,
-            total: Number(advance.amount) || 0,
-            outstanding: round2((Number(advance.amount) || 0) - (Number(advance.amountRepaid) || 0)),
-            instalments: Number(advance.instalments) || 1,
-            instalmentsPaid: Number(advance.instalmentsPaid) || 0
+            total: Number(row.amount),
+            outstanding: round2(Number(row.outstanding)),
+            instalments: Number(row.instalments),
+            instalmentsPaid: Number(row.instalmentsPaid)
         });
-    });
+    }
 
     return result;
 }
 
 /**
- * Record a repayment against an advance, inside an existing batch.
- * Marks the advance settled once it is fully repaid.
+ * Record a repayment against an advance, marking it settled once fully repaid.
+ * Takes a transaction client so it commits atomically with the payroll run.
  */
-function applyRepayment(batch, advanceId, { amount, payrollId, isFinal }) {
-    batch.update(advanceRequests().doc(advanceId), {
-        amountRepaid: FieldValue.increment(round2(amount)),
-        instalmentsPaid: FieldValue.increment(1),
-        status: isFinal ? 'Settled' : 'Repaying',
-        lastDeductedPayrollId: payrollId,
-        lastDeductedAt: serverTimestamp(),
-        settledAt: isFinal ? serverTimestamp() : null,
-        updatedAt: serverTimestamp()
-    });
+async function applyRepayment(client, advanceId, { amount, payrollId }) {
+    await client.query(
+        `UPDATE advance_requests
+            SET amount_repaid    = amount_repaid + $1,
+                instalments_paid = instalments_paid + 1,
+                status           = CASE WHEN amount_repaid + $1 >= amount THEN 'Settled' ELSE 'Repaying' END,
+                settled_at       = CASE WHEN amount_repaid + $1 >= amount THEN now() ELSE NULL END,
+                last_deducted_payroll_id = $2,
+                last_deducted_at = now()
+          WHERE id = $3`,
+        [round2(amount), payrollId, advanceId]
+    );
 }
 
 /**
  * Reverse every repayment recorded against a payroll run, used when a run is
- * voided and reprocessed so advances are not double-counted.
+ * superseded so advances are not double-counted.
  */
-async function reverseRepaymentsForPayroll(payrollId, items) {
-    const affected = items.filter(item => item.advanceId && Number(item.advanceDeduction) > 0);
-    if (!affected.length) return;
+async function reverseRepaymentsForPayroll(client, payrollId, version) {
+    const affected = await client.query(
+        `UPDATE advance_requests a
+            SET amount_repaid    = GREATEST(0, a.amount_repaid - r.total),
+                instalments_paid = GREATEST(0, a.instalments_paid - r.lines),
+                status           = CASE
+                                      WHEN GREATEST(0, a.amount_repaid - r.total) <= 0 THEN 'Approved'
+                                      ELSE 'Repaying'
+                                   END,
+                settled_at       = NULL
+           FROM (
+                SELECT advance_id, SUM(advance_deduction) AS total, COUNT(*) AS lines
+                  FROM payroll_items
+                 WHERE payroll_id = $1 AND version = $2
+                   AND advance_id IS NOT NULL AND advance_deduction > 0
+                 GROUP BY advance_id
+           ) r
+          WHERE a.id = r.advance_id
+          RETURNING a.id`,
+        [payrollId, version]
+    );
 
-    const { commitInChunks } = require('../firebase');
-    await commitInChunks(affected.map(item => (batch) => {
-        batch.update(advanceRequests().doc(item.advanceId), {
-            amountRepaid: FieldValue.increment(-round2(item.advanceDeduction)),
-            instalmentsPaid: FieldValue.increment(-1),
-            status: 'Repaying',
-            settledAt: null,
-            reversedFromPayrollId: payrollId,
-            updatedAt: serverTimestamp()
-        });
-    }));
+    return affected.rowCount;
 }
 
 module.exports = {

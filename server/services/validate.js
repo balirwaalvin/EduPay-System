@@ -123,7 +123,10 @@ function otp(value, label = 'Verification code') {
     return trimmed;
 }
 
-/** Firestore document id. */
+/**
+ * A natural-key identifier used directly in a URL path, such as a salary scale
+ * name. Numeric primary keys go through `num` instead.
+ */
 function docId(value, label = 'Identifier') {
     const trimmed = String(value || '').trim();
     if (!trimmed || trimmed.length > 128 || trimmed.includes('/')) fail(`${label} is not valid.`);

@@ -1,6 +1,147 @@
 # Changelog
 
-## 2.0.0 — Firebase migration and audit remediation
+## 2.1.0 — PostgreSQL on Google Cloud SQL
+
+The data layer moved from Cloud Firestore to PostgreSQL. Every fix from 2.0.0 is
+retained; what changed is where the data lives and how much of the correctness is
+enforced by the database rather than by application code.
+
+### Why move back
+
+Firestore is a good fit for horizontally-scaled, offline-first, document-shaped
+workloads. Payroll is none of those. Concretely, building it on Firestore
+required hand-rolling six things PostgreSQL provides natively — batched point
+reads standing in for joins, a username reservation collection standing in for a
+unique constraint, natural document ids standing in for two more, chunked batches
+standing in for transactions, a rounding helper standing in for a decimal type,
+and manual dependent cleanup standing in for `ON DELETE` rules.
+
+Three points settled it:
+
+1. **Money had no exact type.** Firestore stores IEEE 754 doubles. Payroll
+   figures are filed with URA and NSSF, so amounts are now `NUMERIC(14,2)` —
+   exact decimal.
+2. **Large payroll runs were not atomic.** Firestore caps a batch at 500
+   operations, so a run was split into chunks that could half-apply. The whole
+   run is now one transaction.
+3. **Nothing could be enforced by the store.** Every invariant lived in
+   application code, where the next change can forget it.
+
+Worth being clear: the original bugs were not PostgreSQL's fault. Of the 26 audit
+findings, about 24 were application-layer, and the two that were database-related
+— the salary-structure save and the broken deletes — were *missing constraints*.
+The lesson was that the schema was underspecified, not that the engine was wrong.
+
+### Removed
+
+`firebase-admin`, `server/firebase.js`, `firestore.rules`,
+`firestore.indexes.json`, `firebase.json`, `.firebaserc`.
+
+Firebase Analytics on the sign-in page is kept — it is independent of the data
+layer — so `public/js/firebase-client.js` and the project's web config remain.
+
+### Added
+
+- `server/db.js` — connection pool with three Cloud SQL connection styles,
+  camelCase row mapping, exact-decimal type parsing, `withTransaction`, bulk
+  insert building, and constraint-violation translation into HTTP error codes
+- `server/migrate.js` — a migration runner: numbered files, applied once each
+  inside a transaction, recorded with checksums, with drift detection. This
+  replaces the ALTER-on-every-boot chain that caused the MFA bug in 1.x
+- `server/migrations/001_initial_schema.sql` — the full schema
+- `tests/constraints.test.js` — 30 tests asserting the schema itself refuses the
+  bad cases
+
+### Invariants now enforced by the database
+
+These were application-only checks and are now constraints, which makes them
+race-free:
+
+| Rule | Mechanism |
+|---|---|
+| Net pay is never negative | `CHECK (net_salary >= 0)` |
+| Payroll arithmetic is consistent | `CHECK (abs(net − (gross − deductions)) < 0.01)` |
+| The processor never approves their own run | `CHECK (approved_by IS DISTINCT FROM processed_by)` |
+| Leave never overlaps | `EXCLUDE USING gist` on teacher + date range |
+| One open advance per teacher | Partial unique index on open statuses |
+| An advance is never over-repaid | `CHECK (amount_repaid <= amount)` |
+| One structure per salary scale | Primary key on the scale name |
+| One payroll run per period | `UNIQUE (month, year)` |
+| A teacher's scale must exist | Foreign key, `ON DELETE RESTRICT` |
+| Payroll history survives staff deletion | `ON DELETE RESTRICT` on `payroll_items.teacher_id` |
+| The audit trail survives account deletion | `ON DELETE SET NULL` on `audit_log.user_id` |
+| Leave day counts cannot drift | `GENERATED ALWAYS AS … STORED` |
+| A paused teacher carries a reason | `CHECK (NOT payroll_halted OR reason IS NOT NULL)` |
+
+### Other improvements the move enabled
+
+- **Payroll processing is one transaction**, with `SELECT … FOR UPDATE` on the
+  period row so concurrent runs serialise instead of colliding
+- **Aggregates are computed by the database.** Dashboard figures are one query
+  with scalar subqueries instead of eight round trips; statutory totals are a
+  `SUM`, not a JavaScript reduce over fetched documents
+- **Joins replace batched point reads** throughout, so a teacher list is one
+  query rather than a list plus several key lookups
+- **Role notifications are a single `INSERT … SELECT`**, rather than reading the
+  recipients into the application and writing them back
+- **Unpaid-leave abatement is one query** for all teachers, using `LEAST`/
+  `GREATEST` on the date bounds, replacing one query per teacher
+- **Audit pagination uses keyset paging** on a monotonic id, which stays fast at
+  any depth
+- **Zero npm vulnerabilities.** Dropping `firebase-admin` removed the
+  unfixable transitive `uuid` advisory; the one remaining instance, from
+  `exceljs`, is resolved with an `overrides` entry, verified not to break Excel
+  generation
+
+### Bugs found while building this
+
+- **A `CHECK` constraint collided with `ON DELETE SET NULL`.** Requiring
+  `approved_by IS NOT NULL` on an approved run meant deleting a former approver
+  failed — the same class of bug as finding #3. The constraint now requires
+  `approved_by_name`, so the name is preserved while the key detaches.
+- **An ambiguous column reference.** A shared SQL snippet used unqualified
+  `year, month`, which breaks wherever `payroll_items` and `payroll` are joined.
+  It now takes a table alias.
+- **Two destructive test suites raced.** Both reset the same database and
+  cancelled one another under parallel execution; `npm test` now runs with
+  `--test-concurrency=1`.
+
+### Breaking changes
+
+- **Identifiers are integers.** Payroll ids were `YYYY-MM` strings and are now
+  `BIGSERIAL`. Any stored link or bookmark containing an old id will not resolve.
+- `GET /api/admin/audit-log` cursors are numeric ids rather than document ids.
+- `GET /readyz` reports `database`, `databaseName` and `databaseVersion` in place
+  of `firestore` and `projectId`.
+- Environment variables changed: `FIREBASE_SERVICE_ACCOUNT` and friends are gone;
+  use `INSTANCE_UNIX_SOCKET`, `DATABASE_URL`, or `DB_HOST`/`DB_USER`/
+  `DB_PASSWORD`/`DB_NAME`. See `.env.example`.
+- `npm run db:init` is gone. Use `npm run db:setup`, or `db:migrate` then
+  `db:seed`.
+
+### Migrating data from the Firestore build
+
+If the 2.0.0 build holds production data:
+
+1. Export it with `GET /api/admin/backup` while still on 2.0.0
+2. Create the schema on Cloud SQL: `npm run db:migrate`
+3. Load `salaryStructures` first, then `users`, then `teachers` and
+   `accountants` — the foreign keys require that order
+4. Map camelCase fields to snake_case columns, and ISO timestamp strings to
+   `TIMESTAMPTZ`
+5. Load `payroll`, then `payrollItems`, then `leaveRequests` and
+   `advanceRequests`
+6. Set the `counters` rows above the highest existing employee id, so newly
+   allocated ids do not collide
+7. Confirm with `npm run db:migrate:status` and a sign-in as each role
+
+The constraints will reject inconsistent historical rows — a negative net salary,
+overlapping leave, two open advances for one teacher. That is the schema doing its
+job; those rows need correcting rather than the constraint relaxing.
+
+---
+
+## 2.0.0 — Audit remediation (data layer since superseded by 2.1.0)
 
 Two changes at once: the data layer moved from DigitalOcean PostgreSQL to Cloud
 Firestore, and the 26 findings from the code audit were addressed.

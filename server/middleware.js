@@ -1,6 +1,5 @@
 const jwt = require('jsonwebtoken');
 const rateLimit = require('express-rate-limit');
-const { users, docData } = require('./firebase');
 const logger = require('./services/logger');
 
 // ---------------------------------------------------------------------------
@@ -55,26 +54,34 @@ function issueAccessToken(user) {
     );
 }
 
-// Small cache so token validation does not read Firestore on every request.
+// Small cache so token validation does not query the database on every request.
 const userCache = new Map();
 const USER_CACHE_TTL_MS = 30 * 1000;
 
 function cacheUser(user) {
-    userCache.set(user.id, { user, at: Date.now() });
+    userCache.set(Number(user.id), { user, at: Date.now() });
 }
 
 function invalidateUserCache(userId) {
-    userCache.delete(userId);
+    userCache.delete(Number(userId));
 }
 
 async function loadUser(userId) {
-    const hit = userCache.get(userId);
+    const hit = userCache.get(Number(userId));
     if (hit && Date.now() - hit.at < USER_CACHE_TTL_MS) return hit.user;
 
-    const snap = await users().doc(userId).get();
-    if (!snap.exists) return null;
+    // Required lazily: db.js depends on this module for HttpError, so importing
+    // it at the top would create a cycle.
+    const db = require('./db');
 
-    const user = docData(snap);
+    const user = await db.queryOne(
+        `SELECT id, username, role, full_name, email, is_active,
+                must_change_password, token_version
+           FROM users WHERE id = $1`,
+        [userId]
+    );
+    if (!user) return null;
+
     cacheUser(user);
     return user;
 }
@@ -108,7 +115,7 @@ async function authenticateToken(req, res, next) {
         if (!user) {
             return res.status(401).json({ error: 'Account no longer exists.', code: 'USER_GONE' });
         }
-        if (user.isActive === false) {
+        if (!user.isActive) {
             return res.status(403).json({ error: 'This account has been deactivated.', code: 'USER_INACTIVE' });
         }
         if (Number(user.tokenVersion || 0) !== Number(decoded.tokenVersion || 0)) {
@@ -119,7 +126,7 @@ async function authenticateToken(req, res, next) {
         }
 
         req.user = {
-            id: user.id,
+            id: Number(user.id),
             username: user.username,
             role: user.role,
             fullName: user.fullName,

@@ -1,8 +1,8 @@
 # EduPay — Technical Documentation
 
-Implementation reference for the Firebase/Firestore build. For setup and
-operations see [README.md](README.md); for what changed from the PostgreSQL
-version and why, see [CHANGELOG.md](CHANGELOG.md).
+Implementation reference for the PostgreSQL build. For setup and operations see
+[README.md](README.md); for the change history, including the audit remediation
+and the move to Cloud SQL, see [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
@@ -11,7 +11,9 @@ version and why, see [CHANGELOG.md](CHANGELOG.md).
 ```
 server/
   server.js                  Express app, security headers, health checks, startup
-  firebase.js                Admin SDK init, collection handles, Firestore helpers
+  db.js                      Pool, Cloud SQL connection, query helpers, error mapping
+  migrate.js                 Migration runner, checksum-verified
+  migrations/                Numbered SQL files, applied once each
   middleware.js              Auth, role gates, rate limiting, error handling
   seed.js                    Idempotent first-run bootstrap
   routes/
@@ -46,9 +48,8 @@ public/
     app.js                   Escaping, API client, tables, modals, notifications
     login.js password-flows.js firebase-client.js
     admin.js hr.js accountant.js teacher.js
-tests/                       113 tests (76 without Firebase, 37 end-to-end)
-firestore.rules              Deny-all backstop
-firestore.indexes.json       Composite indexes (required)
+tests/                       143 tests (76 with no database, 67 against one)
+server/migrations/001_initial_schema.sql   Tables, constraints, indexes, triggers
 ```
 
 ---
@@ -97,7 +98,7 @@ therefore stops working the moment any of those happens.
 
 ### User cache
 
-`authenticateToken` would otherwise read Firestore on every request, so users
+`authenticateToken` would otherwise query the database on every request, so users
 are cached for 30 seconds. Anything that must take effect immediately calls
 `invalidateUserCache(userId)` — including deactivation, which is handled inside
 `services/accounts.js` so every caller benefits.
@@ -132,161 +133,166 @@ without a delivery channel would lock the account out immediately.
 
 ---
 
-## 4. Firestore data model
+## 4. Database schema
 
-Firestore has no joins, no unique constraints and no `OFFSET`. Three
-consequences shape the design.
+The schema is in `server/migrations/001_initial_schema.sql`. Its distinguishing
+feature is how much it enforces: rules that would otherwise be application-only
+checks are constraints, so they are race-free and cannot be bypassed.
 
-### Natural document ids give uniqueness
+### Money
 
-| Collection | Id | Invariant |
+Every amount is `NUMERIC(14,2)` (totals `NUMERIC(16,2)`) — exact decimal.
+`0.1 + 0.2 = 0.3` holds for `NUMERIC` and not for floating point, which matters
+when the figures are filed with URA and NSSF.
+
+`node-postgres` returns `NUMERIC` as a string to avoid precision loss. `db.js`
+registers a type parser converting it to `Number`, which is safe at two decimal
+places far beyond any realistic payroll, while storage and `SUM()` remain exact.
+
+### Constraints that carry business rules
+
+| Constraint | Table | Guarantees |
 |---|---|---|
-| `salaryStructures` | scale name | One structure per scale |
-| `payroll` | `YYYY-MM` | One run per period |
-| `usernames` | the username | One account per username |
-| `systemConfig` | setting key | One value per setting |
+| `salary_structures_pkey` | `salary_structures` | One structure per scale. The old schema lacked this while the insert used `ON CONFLICT (salary_scale)`, so every save failed |
+| `payroll_period_unique` | `payroll` | One run per period, so concurrent processing cannot duplicate |
+| `payroll_processor_is_not_approver` | `payroll` | `approved_by IS DISTINCT FROM processed_by` — separation of duties in the database |
+| `payroll_approval_complete` | `payroll` | An approved run records `approved_at` and `approved_by_name` |
+| `payroll_items_net_salary_check` | `payroll_items` | Net pay is never negative |
+| `payroll_items_net_consistent` | `payroll_items` | `net = gross − deductions`, to one cent |
+| `payroll_items_unique` | `payroll_items` | One line per teacher per run version |
+| `payroll_items_teacher_id_fkey` | `payroll_items` | `ON DELETE RESTRICT` — payroll history cannot be destroyed |
+| `teachers_salary_scale_fkey` | `teachers` | A teacher's scale must exist; a scale in use cannot be deleted |
+| `teachers_halt_reason_required` | `teachers` | A paused teacher always carries a reason |
+| `leave_no_overlap` | `leave_requests` | `EXCLUDE USING gist` — no overlapping pending or approved leave |
+| `leave_dates_ordered` | `leave_requests` | The end date follows the start |
+| `advance_one_open_per_teacher` | `advance_requests` | A partial unique index: one open advance per teacher |
+| `advance_not_over_repaid` | `advance_requests` | `amount_repaid <= amount` |
+| `audit_log.user_id` | `audit_log` | `ON DELETE SET NULL` — the trail survives account deletion |
 
-`usernames` is a reservation index written in the same transaction as the user
-document, so two concurrent sign-ups cannot share a username:
+Two of these deserve a closer look.
 
-```js
-await getDb().runTransaction(async (tx) => {
-    if ((await tx.get(nameRef)).exists) throw usernameTaken;
-    tx.set(nameRef, { userId: userRef.id });
-    tx.set(userRef, userData);
-});
+**Leave overlap.** An application check reads then writes, so two concurrent
+requests can both pass it. An exclusion constraint cannot be raced:
+
+```sql
+CONSTRAINT leave_no_overlap
+    EXCLUDE USING gist (
+        teacher_id WITH =,
+        daterange(start_date, end_date, '[]') WITH &&
+    ) WHERE (status IN ('Pending', 'Approved'))
 ```
 
-### Reads are composed, not joined
+The `WHERE` clause matters: a rejected or cancelled request releases its dates.
 
-`getManyByIds(collection, ids)` batches point reads through `getAll` in chunks,
-returning a `Map`. Routes fetch the primary list, then resolve related documents
-in one batch — rather than a query per row.
+**One open advance.** Likewise, as a partial unique index:
 
-Frequently displayed fields are denormalised onto `payrollItems`
-(`teacherName`, `employeeId`, `salaryScale`) so a payroll table needs no second
-read, and so a historical payslip keeps the name it was issued under.
-
-### Pagination uses cursors
-
-The audit log orders by `createdAt desc` and pages with `startAfter(doc)`,
-returning `nextCursor`. Each page requests `limit + 1` rows to determine
-`hasMore` without a second query.
-
-### Batch limits
-
-Firestore allows 500 writes per batch. `commitInChunks(writes)` and
-`deleteQueryBatched(query)` split work into chunks of 400, so a payroll run or
-an account cleanup of any size completes.
-
-### Collections
-
-```
-users/{id}
-  username role fullName email phone
-  password                       bcrypt hash, never returned
-  isActive mustChangePassword passwordSetupCompleted
-  tokenVersion                   session revocation counter
-  mfaEnabled mfaMethod mfaSecret
-  mfaPendingTokenHash mfaPendingCodeHash mfaPendingExpiresAt mfaPendingAttempts
-  passwordSetupTokenHash passwordSetupExpiresAt
-  createdAt updatedAt lastLoginAt passwordChangedAt
-  deactivatedAt deactivatedBy deactivationReason
-
-teachers/{id}
-  userId employeeId fullName email phone position
-  salaryScale dateJoined isActive leaveEntitlementDays
-  payrollHalted payrollHaltReason payrollHaltedAt payrollHaltedBy
-  paymentMethod bankName bankAccountName bankAccountNumber
-  mobileMoneyProvider mobileMoneyNumber
-
-salaryStructures/{scale}
-  basicSalary housingAllowance transportAllowance medicalAllowance otherAllowance
-  taxPercentage                  only used in flat tax mode
-  nssfPercentage loanDeduction otherDeduction
-
-payroll/{YYYY-MM}
-  month year periodLabel status version employeeCount currency taxMode
-  totalGross totalDeductions totalNet
-  totalPaye totalNssfEmployee totalNssfEmployer totalEmployerCost
-  processedBy processedByName processedAt
-  approvedBy approvedByName approvedAt
-  rejectedBy rejectionReason fullyPaidAt
-
-payroll/{YYYY-MM}/versions/{n}
-  a full copy of the superseded run, including its items
-
-payrollItems/{id}
-  payrollId version month year superseded
-  teacherId teacherName employeeId salaryScale
-  basicSalary contractualBasicSalary  abated vs contractual
-  housingAllowance transportAllowance medicalAllowance otherAllowance grossSalary
-  taxAmount nssfAmount nssfEmployerAmount loanDeduction
-  advanceDeduction advanceDeferred advanceId
-  unpaidLeaveDays unpaidLeaveDeduction otherDeduction
-  totalDeductions netSalary employerCost
-  paymentStatus paymentReference paidAt paidBy
-
-leaveRequests/{id}
-  teacherId teacherName employeeId leaveType startDate endDate days
-  reason isUnpaid status decidedBy decidedByName decidedAt decisionNote
-
-advanceRequests/{id}
-  teacherId teacherName employeeId amount reason status
-  requestedInstalments instalments amountRepaid instalmentsPaid
-  approvedBy approvedAt rejectedBy decisionNote
-  lastDeductedPayrollId lastDeductedAt settledAt
-
-notifications/{id}   userId title message category severity link isRead createdAt readAt
-auditLog/{id}        userId username role action details ipAddress createdAt
-counters/{name}      value          transactional sequences
-passwordResets/{hash} userId username expiresAt usedAt requestedIp
+```sql
+CREATE UNIQUE INDEX advance_one_open_per_teacher
+    ON advance_requests (teacher_id)
+    WHERE status IN ('Pending', 'Approved', 'Repaying');
 ```
 
-### Status values
+### Generated and triggered columns
 
-| Entity | States |
-|---|---|
-| `payroll.status` | `processed` → `approved` → `paid`, or `rejected` |
-| `payrollItems.paymentStatus` | `Pending`, `Paid` |
-| `leaveRequests.status` | `Pending`, `Approved`, `Rejected`, `Cancelled` |
-| `advanceRequests.status` | `Pending`, `Approved`, `Repaying`, `Settled`, `Rejected`, `Cancelled` |
+`leave_requests.days` is `GENERATED ALWAYS AS (end_date - start_date + 1) STORED`,
+so the stored count can never drift from the dates. A `set_updated_at` trigger
+maintains `updated_at` on the eight mutable tables, so no `UPDATE` has to
+remember it.
+
+### Deletion semantics
+
+Chosen per relationship, because the previous schema's lack of any `ON DELETE`
+rule is what broke deletes entirely:
+
+| Relationship | Rule | Why |
+|---|---|---|
+| `teachers.user_id` → `users` | `CASCADE` | The profile has no meaning without the account |
+| `accountants.user_id` → `users` | `CASCADE` | As above |
+| `notifications.user_id` → `users` | `CASCADE` | Nobody left to read them |
+| `payroll_items.teacher_id` → `teachers` | `RESTRICT` | Financial history must survive |
+| `payroll_items.payroll_id` → `payroll` | `CASCADE` | Lines belong to their run |
+| `audit_log.user_id` → `users` | `SET NULL` | Keep the trail, detach the key |
+| `payroll.approved_by` → `users` | `SET NULL` | `approved_by_name` is the durable record |
+| `leave_requests.teacher_id` → `teachers` | `CASCADE` | No financial record |
+
+A subtlety worth knowing: `payroll.approved_by` is `SET NULL`, so the approval
+check constraint requires `approved_by_name` rather than `approved_by`. Requiring
+the foreign key would make deleting a former approver fail — exactly the class of
+bug that broke deletes in the first place.
+
+### Tables
+
+```
+users                 credentials, role, two-factor state, token_version
+teachers              employment record, scale, payment destination, halt state
+accountants           accountant profile
+salary_structures      PK = scale name; basic, allowances, deduction rates
+payroll                PK = id, UNIQUE (month, year); status, version, totals
+payroll_versions      PK = (payroll_id, version); JSONB snapshot of a superseded run
+payroll_items          one line per teacher per run version; all NUMERIC(14,2)
+leave_requests         type, dates, generated day count, paid/unpaid, decision
+advance_requests       amount, instalment schedule, repayment progress
+notifications          per-user inbox, every role
+audit_log              privileged actions, surviving account deletion
+system_config          one row per setting, JSONB values
+password_resets        PK = token hash; single-use reset tokens
+counters               employee-id sequences
+schema_migrations      applied migrations with checksums
+```
+
+### Indexes
+
+Beyond the primary and unique keys: `users (role, is_active)`,
+`users (created_at DESC)`, partial indexes on the sparse token columns,
+`teachers (is_active, payroll_halted)` for payroll eligibility,
+`payroll (year DESC, month DESC)`, `payroll_items (payroll_id, version)`,
+a partial index on pending payments, `leave_requests (teacher_id, status)`,
+a partial index on approved unpaid leave for the payroll abatement query,
+`notifications (user_id)` partial on unread, and `audit_log` by created_at,
+action and username.
 
 ---
 
 ## 5. Payroll processing
 
-`POST /api/accountant/payroll/process` — the most involved operation.
+`POST /api/accountant/payroll/process` — the most involved operation, and now a
+single transaction.
 
 ```
-1  Validate the period                      month 1–12, year 2000..now+1
-2  Load the run at payroll/{YYYY-MM}        the id is the period
-3  Refuse if already approved or paid       PAYROLL_LOCKED
-4  Load eligible teachers                   isActive && !payrollHalted
-5  Load every salary structure
-6  Refuse if any teacher's scale is missing  before writing anything
-7  Resolve advance instalments due
-8  Resolve approved unpaid-leave days in the period
-9  Compute every line in memory              a failure writes nothing
-10 Archive the previous version              payroll/{id}/versions/{n}
-11 Reverse its advance repayments            so nothing is double-counted
-12 Flag its lines superseded: true           never deleted
-13 Write the run at version n+1
-14 Write the lines, recording each repayment
-15 Notify HR that approval is pending
-16 Audit
+BEGIN
+ 1  Validate the period                      month 1–12, year 2000..now+1
+ 2  SELECT … FOR UPDATE on the period row    a concurrent run waits here
+ 3  Refuse if already approved or paid       PAYROLL_LOCKED
+ 4  Load eligible teachers joined to their structures
+ 5  Refuse if any teacher's scale is missing  before writing anything
+ 6  Resolve advance instalments due          one query
+ 7  Resolve unpaid-leave days in the period  one query, all teachers
+ 8  Compute every line in memory             a failure writes nothing
+ 9  Archive the previous version to payroll_versions (JSONB)
+10  Reverse its advance repayments           one UPDATE … FROM
+11  Flag its lines superseded                never deleted
+12  Upsert the run header at version n+1
+13  Insert every line in one multi-row INSERT
+14  Record each advance repayment
+COMMIT
 ```
 
-Steps 6 and 9 matter: the whole run is validated and calculated before the
+Everything between `BEGIN` and `COMMIT` is atomic at any number of employees.
+This is the principal integrity gain over the previous document-store build,
+whose batches capped at 500 operations and so had to be split into chunks that
+were not atomic with one another — a large run could half-apply.
+
+Steps 5 and 8 matter too: the run is fully validated and calculated before the
 first write, so a bad salary scale produces a clear 400 rather than a
 half-written payroll.
 
-### Versioning
+### Concurrency
 
-Reprocessing supersedes rather than destroys. `GET /payroll/:id/versions`
-returns the archive. Live queries filter `version == run.version`, and
-superseded lines carry `superseded: true` so a teacher's payslip list and salary
-history never show stale figures.
+`FOR UPDATE` on the period row serialises two accountants pressing Process at the
+same moment: the second blocks until the first commits, then sees its work and
+supersedes it as version 2. Without the lock, both would pass the existence check
+and the `payroll_period_unique` constraint would reject the loser with a 409 —
+correct, but a worse experience.
 
 ### Calculation order
 
@@ -314,8 +320,8 @@ employerCost      = gross + nssfEmployer
 ```
 
 Allowances are never abated for unpaid leave — only basic pay is. The advance
-floor is what guarantees net pay cannot be driven to zero, and the deferred
-remainder is shown on the payslip so the employee can see why less was taken.
+floor guarantees net pay cannot be driven to zero, and `payroll_items_net_salary_check`
+means the database would reject the row even if the calculator were wrong.
 
 ### Advance instalments
 
@@ -331,7 +337,7 @@ prevents a rounding tail: 100,000 over three instalments is 33,333.33,
 | Control | Where |
 |---|---|
 | Only HR may approve payroll, administrators included | `hr.js` — explicit `role !== 'hr'` check inside the handler |
-| Nobody may approve a run they processed | `hr.js` — `processedBy === req.user.id` → `SELF_APPROVAL` |
+| Nobody may approve a run they processed | `hr.js` check, **and** the `payroll_processor_is_not_approver` constraint |
 | Payments require an approved run | `accountant.js` — `PAYROLL_NOT_APPROVED` |
 | An approved run cannot be reprocessed | `accountant.js` — `PAYROLL_LOCKED` |
 | Administrators cannot read another user's MFA code | codes are hashed; no endpoint returns one |
@@ -416,51 +422,72 @@ every visit.
 ## 9. Testing
 
 ```bash
-npm test                                            # 76 tests, no credentials
-npx firebase emulators:start --only firestore       # in another terminal
-FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 npm test     # 113 tests
+npm test                                           # 76 tests, no database needed
+
+createdb edupay_test
+TEST_DATABASE_URL=postgresql://…/edupay_test npm test   # 143 tests
 ```
 
-| File | Covers |
-|---|---|
-| `tax.test.js` | Every PAYE band boundary, the 10 M surcharge, flat and disabled modes, NSSF split |
-| `payroll-calculator.test.js` | Gross composition, unpaid-leave abatement, the net-pay floor, advance deferral, missing structures, run totals |
-| `leave.test.js` | Inclusive day counts, month and year boundaries, range and window validation |
-| `advances.test.js` | Ceilings, instalment arithmetic, the final-instalment remainder |
-| `validate.test.js` | Every validator, including rejection of the old shared passwords and of `month 47 of 1823` |
-| `escaping.test.js` | Real XSS payloads, attribute breakout, forged trust markers |
-| `smoke.test.js` | Security headers, CSP without `unsafe-inline`, page serving, the auth gate, JSON 404s, body limits |
-| `integration.test.js` | The whole workflow against real Firestore |
+| File | Covers | Needs a database |
+|---|---|---|
+| `tax.test.js` | Every PAYE band boundary, the 10 M surcharge, flat and disabled modes, NSSF split | no |
+| `payroll-calculator.test.js` | Gross composition, unpaid-leave abatement, the net-pay floor, advance deferral, missing structures, run totals | no |
+| `leave.test.js` | Inclusive day counts, month and year boundaries, range and window validation | no |
+| `advances.test.js` | Ceilings, instalment arithmetic, the final-instalment remainder | no |
+| `validate.test.js` | Every validator, including rejection of the old shared passwords and of `month 47 of 1823` | no |
+| `escaping.test.js` | Real XSS payloads, attribute breakout, forged trust markers | no |
+| `smoke.test.js` | Security headers, CSP without `unsafe-inline`, page serving, the auth gate, JSON 404s, body limits | no |
+| `constraints.test.js` | 30 tests asserting the **schema** refuses negative net pay, overlapping leave, a second open advance, self-approval, deleting a teacher with payroll history, exact decimal money | yes |
+| `integration.test.js` | 37 tests covering the whole workflow end to end | yes |
 
-The integration suite wipes and seeds the emulator before running, so it is
-repeatable, and refuses to run unless `FIRESTORE_EMULATOR_HOST` points at
-localhost — it must never touch a real database.
+Both database suites truncate and re-seed before running, so they are
+repeatable, and each refuses to run unless the database name contains `test`.
+
+They are run with `--test-concurrency=1`, because both reset the same database
+and would otherwise cancel one another.
 
 ---
 
 ## 10. Operational notes
 
-### Required indexes
+### Connection pooling
 
-`firestore.indexes.json` declares 20 composite indexes. Without them several
-dashboard queries fail with `FAILED_PRECONDITION`. Deploy with:
+`PG_POOL_MAX` (default 10) is per process. Cloud Run scales horizontally, so the
+ceiling is `PG_POOL_MAX × max instances`, which must stay below the instance's
+`max_connections` — the smaller Cloud SQL tiers allow relatively few. Symptoms of
+getting this wrong are `remaining connection slots are reserved` errors under
+load.
 
-```bash
-npx firebase deploy --only firestore:indexes
-```
+`statement_timeout` and `query_timeout` default to 30 seconds, so a pathological
+query frees its pool slot rather than holding it indefinitely. The pool is
+drained on `SIGTERM`, so a Cloud Run revision shutting down releases its slots.
 
-### Costs
+### Error mapping
 
-Firestore bills per document read. The deliberate choices that reduce reads:
-batched `getAll` instead of per-row queries, denormalised display fields on
-payroll items, a 30-second config cache, a 30-second user cache in auth, and
-`count()` aggregation queries for dashboard figures rather than fetching
-documents to count them.
+`db.js` maps constraint violations onto the application's own error codes, so a
+violation becomes an explained 4xx rather than an opaque 500. For example
+`leave_no_overlap` → `409 LEAVE_OVERLAP`, and
+`payroll_items_teacher_id_fkey` → `409 HAS_PAYROLL_HISTORY` with advice to
+deactivate instead. Unrecognised database errors pass through untranslated and
+are reported as genuine faults.
 
-### Known limitation
+### Backups
 
-`firebase-admin` depends on `google-gax`, which pins a `uuid` version carrying a
-moderate advisory (`GHSA-w5hq-g745-h8pq`). The affected path is `uuid` v3/v5/v6
-called with an explicit `buf` argument, which neither EduPay nor the Firebase
-SDK does. Resolving it requires an upstream release; `npm audit` will continue
-to report it.
+Enable automated backups and point-in-time recovery on the Cloud SQL instance;
+that is the real backup. `GET /api/admin/backup` is a JSON export for ad-hoc
+inspection and migration, and omits password hashes and two-factor secrets.
+
+### Migrations in deployment
+
+Migrations are not run automatically at startup, deliberately: several Cloud Run
+instances starting at once would race. Run `npm run db:migrate` as a separate
+step — a Cloud Build step, a one-off Cloud Run job, or from a laptop through the
+Auth Proxy — then deploy. The server checks at startup that the schema exists and
+exits with a clear message if it does not.
+
+### Query performance
+
+`db.js` logs any query exceeding `PG_SLOW_QUERY_MS` (default 500 ms) with its
+duration and a truncated statement. For anything that shows up there, `EXPLAIN
+(ANALYZE, BUFFERS)` against a copy of production data is the next step; the
+indexes listed in section 4 cover the current query set.
