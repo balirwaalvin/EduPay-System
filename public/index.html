@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en" data-analytics="on">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description"
+    content="EduPay — school payroll system. Secure sign-in for administrators, HR, accountants and teachers.">
+  <meta name="color-scheme" content="dark light">
+  <title>Sign in · EduPay</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+
+<body class="auth-page">
+  <!--
+    The starfield is drawn with CSS gradients on three layers rather than ~42
+    absolutely-positioned animated elements, which kept low-end devices
+    repainting constantly. It is also disabled under prefers-reduced-motion.
+  -->
+  <div class="space-backdrop" aria-hidden="true">
+    <div class="space-layer space-layer-far"></div>
+    <div class="space-layer space-layer-mid"></div>
+    <div class="space-layer space-layer-near"></div>
+    <div class="space-glow"></div>
+  </div>
+
+  <main class="auth-wrapper">
+    <div class="auth-card">
+      <header class="auth-logo">
+        <h1>Edu<span>Pay</span></h1>
+        <p>School Payroll System</p>
+      </header>
+
+      <p id="loginError" class="auth-alert auth-alert-error" role="alert" hidden></p>
+      <p id="loginNotice" class="auth-alert auth-alert-info" role="status" hidden></p>
+
+      <form id="loginForm" class="auth-form" novalidate>
+        <div class="form-group">
+          <label for="username">Username</label>
+          <input type="text" id="username" name="username" autocomplete="username" autocapitalize="none"
+            spellcheck="false" required placeholder="your.username">
+        </div>
+
+        <div class="form-group">
+          <label for="password">Password</label>
+          <input type="password" id="password" name="password" autocomplete="current-password" required
+            placeholder="Your password">
+        </div>
+
+        <button type="submit" id="loginBtn" class="btn btn-primary btn-block">Sign in</button>
+
+        <p class="auth-links">
+          <a href="/forgot-password.html">Forgotten your password?</a>
+        </p>
+      </form>
+
+      <form id="mfaForm" class="auth-form" novalidate hidden>
+        <div class="form-group">
+          <label for="otpCode">Verification code</label>
+          <input type="text" id="otpCode" name="otpCode" inputmode="numeric" autocomplete="one-time-code"
+            maxlength="6" pattern="\d{6}" required placeholder="000000" class="otp-input">
+          <p class="form-hint" id="mfaCountdown" role="status" aria-live="polite"></p>
+        </div>
+
+        <button type="submit" id="verifyBtn" class="btn btn-primary btn-block">Verify and continue</button>
+        <button type="button" id="resendBtn" class="btn btn-ghost btn-block">Send a new code</button>
+        <button type="button" id="backToLoginBtn" class="btn btn-ghost btn-block">Back to sign in</button>
+      </form>
+    </div>
+
+    <p class="auth-footnote">Need an account? Your school administrator creates it for you.</p>
+  </main>
+
+  <script src="/js/app.js"></script>
+  <script src="/js/login.js"></script>
+  <script type="module">
+    import { initFirebaseAnalytics } from '/js/firebase-client.js';
+    initFirebaseAnalytics();
+  </script>
+</body>
+
+</html>

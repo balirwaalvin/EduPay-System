@@ -1,0 +1,43 @@
+# Dependencies
+node_modules/
+
+# Environment and credentials — never commit these
+.env
+.env.*
+!.env.example
+serviceAccountKey.json
+*serviceaccount*.json
+*-service-account*.json
+*.pem
+*.key
+
+# Logs
+*.log
+npm-debug.log*
+
+# Firebase tooling
+.firebase/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+*.local
+
+# Build and cache
+dist/
+build/
+.cache/
+coverage/
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editors
+.vscode/
+.idea/
+*.swp
+
+# Backups
+*.bak
+*.backup

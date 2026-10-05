@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="color-scheme" content="dark light">
+  <title>Teacher Portal · EduPay</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+
+<body>
+  <a href="#mainContent" class="sr-only">Skip to main content</a>
+
+  <div class="dashboard">
+    <aside class="sidebar" aria-label="Main navigation">
+      <div class="sidebar-header">
+        <h2>Edu<span>Pay</span></h2>
+        <p class="user-role">Teacher Portal</p>
+        <button type="button" class="mobile-close-btn" aria-label="Close navigation">✕</button>
+      </div>
+
+      <nav class="sidebar-nav">
+        <div class="nav-section">
+          <p class="nav-section-title" id="navOverview">Overview</p>
+          <button type="button" class="nav-item" data-section="dashboard" data-title="Dashboard">
+            <span class="nav-icon" aria-hidden="true">📊</span> Dashboard
+          </button>
+        </div>
+
+        <div class="nav-section">
+          <p class="nav-section-title">My pay</p>
+          <button type="button" class="nav-item" data-section="payslips" data-title="My Payslips">
+            <span class="nav-icon" aria-hidden="true">🧾</span> Payslips
+          </button>
+          <button type="button" class="nav-item" data-section="history" data-title="Salary History">
+            <span class="nav-icon" aria-hidden="true">📈</span> Salary History
+          </button>
+        </div>
+
+        <div class="nav-section">
+          <p class="nav-section-title">Requests</p>
+          <button type="button" class="nav-item" data-section="leave" data-title="Leave">
+            <span class="nav-icon" aria-hidden="true">🗓</span> Leave
+          </button>
+          <button type="button" class="nav-item" data-section="advances" data-title="Salary Advances">
+            <span class="nav-icon" aria-hidden="true">💵</span> Advances
+          </button>
+        </div>
+
+        <div class="nav-section">
+          <p class="nav-section-title">Account</p>
+          <button type="button" class="nav-item" data-section="profile" data-title="My Profile">
+            <span class="nav-icon" aria-hidden="true">👤</span> Profile
+          </button>
+          <button type="button" class="nav-item" data-section="security" data-title="Security">
+            <span class="nav-icon" aria-hidden="true">🔒</span> Security
+          </button>
+        </div>
+      </nav>
+
+      <div class="sidebar-footer">
+        <button type="button" class="btn btn-secondary btn-block" data-action="logout">Sign out</button>
+      </div>
+    </aside>
+
+    <div class="main-content">
+      <header class="topbar">
+        <button type="button" class="menu-toggle" aria-label="Open navigation" aria-expanded="false">☰</button>
+        <h1 id="pageTitle">Dashboard</h1>
+        <div id="notificationBell"></div>
+        <div class="topbar-user">
+          <span class="user-avatar" aria-hidden="true"></span>
+          <span class="user-meta">
+            <span class="user-full-name"></span>
+            <span class="user-role-display"></span>
+          </span>
+        </div>
+      </header>
+
+      <main class="content-area" id="mainContent">
+
+        <!-- Dashboard -->
+        <section id="dashboard" class="page-section" aria-labelledby="navOverview">
+          <div id="haltBanner" hidden></div>
+
+          <div class="stats-grid">
+            <div class="stat-card">
+              <p class="stat-label">Latest net pay</p>
+              <p class="stat-value" id="statLatestNet">—</p>
+              <p class="stat-hint" id="statLatestPeriod"></p>
+            </div>
+            <div class="stat-card accent-success">
+              <p class="stat-label">Total received</p>
+              <p class="stat-value" id="statTotalEarned">—</p>
+              <p class="stat-hint">Across all paid payslips</p>
+            </div>
+            <div class="stat-card accent-info">
+              <p class="stat-label">Paid leave left</p>
+              <p class="stat-value" id="statLeaveLeft">—</p>
+              <p class="stat-hint" id="statLeaveHint"></p>
+            </div>
+            <div class="stat-card accent-warning">
+              <p class="stat-label">Advance outstanding</p>
+              <p class="stat-value" id="statAdvance">—</p>
+              <p class="stat-hint">Still to be recovered</p>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h2>Current salary structure</h2>
+                <p class="card-subtitle">Your scale as recorded by HR</p>
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="table-wrap">
+                <table>
+                  <caption class="sr-only">Your salary components</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Component</th>
+                      <th scope="col" class="numeric">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody id="structureTableBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Payslips -->
+        <section id="payslips" class="page-section" hidden>
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h2>My payslips</h2>
+                <p class="card-subtitle">Payslips appear once HR has approved the payroll run</p>
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="toolbar">
+                <input type="search" id="payslipSearch" class="search-field" placeholder="Search by period…"
+                  aria-label="Search payslips">
+                <span class="toolbar-count" id="payslipCount"></span>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <caption class="sr-only">Your payslips</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col" data-sort="periodSort">Period</th>
+                      <th scope="col" class="numeric" data-sort="grossSalary">Gross</th>
+                      <th scope="col" class="numeric" data-sort="totalDeductions">Deductions</th>
+                      <th scope="col" class="numeric" data-sort="netSalary">Net pay</th>
+                      <th scope="col" data-sort="paymentStatus">Status</th>
+                      <th scope="col">Payslip</th>
+                    </tr>
+                  </thead>
+                  <tbody id="payslipTableBody"></tbody>
+                </table>
+              </div>
+              <div class="pager" id="payslipPager"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Salary history -->
+        <section id="history" class="page-section" hidden>
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h2>Salary history</h2>
+                <p class="card-subtitle">Every payroll run you appear on</p>
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="table-wrap">
+                <table>
+                  <caption class="sr-only">Salary history</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Period</th>
+                      <th scope="col" class="numeric">Gross</th>
+                      <th scope="col" class="numeric">PAYE</th>
+                      <th scope="col" class="numeric">NSSF</th>
+                      <th scope="col" class="numeric">Advance</th>
+                      <th scope="col" class="numeric">Net pay</th>
+                      <th scope="col">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody id="historyTableBody"></tbody>
+                </table>
+              </div>
+              <div class="pager" id="historyPager"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Leave -->
+        <section id="leave" class="page-section" hidden>
+          <div class="stats-grid">
+            <div class="stat-card accent-info">
+              <p class="stat-label">Entitlement</p>
+              <p class="stat-value" id="leaveEntitlement">—</p>
+              <p class="stat-hint">Paid days this year</p>
+            </div>
+            <div class="stat-card accent-success">
+              <p class="stat-label">Remaining</p>
+              <p class="stat-value" id="leaveRemaining">—</p>
+              <p class="stat-hint">Available to request</p>
+            </div>
+            <div class="stat-card accent-warning">
+              <p class="stat-label">Awaiting decision</p>
+              <p class="stat-value" id="leavePending">—</p>
+              <p class="stat-hint">Days with HR</p>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h2>Leave requests</h2>
+                <p class="card-subtitle">Unpaid leave reduces your basic pay for the affected period</p>
+              </div>
+              <div class="card-actions">
+                <button type="button" class="btn btn-primary" id="newLeaveBtn">Request leave</button>
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="table-wrap">
+                <table>
+                  <caption class="sr-only">Your leave requests</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Type</th>
+                      <th scope="col">Dates</th>
+                      <th scope="col" class="numeric">Days</th>
+                      <th scope="col">Reason</th>
+                      <th scope="col">Status</th>
+                      <th scope="col">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody id="leaveTableBody"></tbody>
+                </table>
+              </div>
+              <div class="pager" id="leavePager"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Advances -->
+        <section id="advances" class="page-section" hidden>
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h2>Salary advances</h2>
+                <p class="card-subtitle" id="advanceLimitHint"></p>
+              </div>
+              <div class="card-actions">
+                <button type="button" class="btn btn-primary" id="newAdvanceBtn">Request advance</button>
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="table-wrap">
+                <table>
+                  <caption class="sr-only">Your advance requests</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Requested</th>
+                      <th scope="col" class="numeric">Amount</th>
+                      <th scope="col" class="numeric">Repaid</th>
+                      <th scope="col" class="numeric">Outstanding</th>
+                      <th scope="col">Instalments</th>
+                      <th scope="col">Status</th>
+                      <th scope="col">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody id="advanceTableBody"></tbody>
+                </table>
+              </div>
+              <div class="pager" id="advancePager"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Profile -->
+        <section id="profile" class="page-section" hidden>
+          <div class="card">
+            <div class="card-header">
+              <h2>Employment details</h2>
+            </div>
+            <div class="card-body">
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="profName">Full name</label>
+                  <input type="text" id="profName" disabled>
+                  <p class="form-hint">Contact HR to change your name</p>
+                </div>
+                <div class="form-group">
+                  <label for="profEmpId">Employee ID</label>
+                  <input type="text" id="profEmpId" disabled>
+                </div>
+                <div class="form-group">
+                  <label for="profPosition">Position</label>
+                  <input type="text" id="profPosition" disabled>
+                </div>
+                <div class="form-group">
+                  <label for="profScale">Salary scale</label>
+                  <input type="text" id="profScale" disabled>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h2>Contact and payment details</h2>
+                <p class="card-subtitle">HR is notified whenever a payment destination changes</p>
+              </div>
+            </div>
+            <form id="profileForm" novalidate>
+              <div class="card-body">
+                <div class="form-row">
+                  <div class="form-group">
+                    <label for="profEmail">Email</label>
+                    <input type="email" id="profEmail" name="email" autocomplete="email">
+                  </div>
+                  <div class="form-group">
+                    <label for="profPhone">Phone</label>
+                    <input type="tel" id="profPhone" name="phone" autocomplete="tel">
+                  </div>
+                </div>
+
+                <hr class="form-divider">
+                <p class="form-legend">How you are paid</p>
+
+                <div class="form-group">
+                  <label for="profPaymentMethod">Payment method</label>
+                  <select id="profPaymentMethod" name="paymentMethod">
+                    <option value="bank">Bank transfer</option>
+                    <option value="mobile_money">Mobile money</option>
+                  </select>
+                </div>
+
+                <div id="profBankFields">
+                  <div class="form-row">
+                    <div class="form-group">
+                      <label for="profBankName">Bank name</label>
+                      <input type="text" id="profBankName" name="bankName">
+                    </div>
+                    <div class="form-group">
+                      <label for="profBankAccountName">Account name</label>
+                      <input type="text" id="profBankAccountName" name="bankAccountName">
+                    </div>
+                    <div class="form-group">
+                      <label for="profBankAccountNumber">Account number</label>
+                      <input type="text" id="profBankAccountNumber" name="bankAccountNumber" inputmode="numeric">
+                    </div>
+                  </div>
+                </div>
+
+                <div id="profMomoFields" hidden>
+                  <div class="form-row">
+                    <div class="form-group">
+                      <label for="profMomoProvider">Provider</label>
+                      <input type="text" id="profMomoProvider" name="mobileMoneyProvider" placeholder="MTN, Airtel…">
+                    </div>
+                    <div class="form-group">
+                      <label for="profMomoNumber">Mobile number</label>
+                      <input type="tel" id="profMomoNumber" name="mobileMoneyNumber">
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="modal-footer">
+                <button type="submit" class="btn btn-primary">Save changes</button>
+              </div>
+            </form>
+          </div>
+        </section>
+
+        <!-- Security -->
+        <section id="security" class="page-section" hidden>
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h2>Change password</h2>
+                <p class="card-subtitle">Signing in again will be required on your other devices</p>
+              </div>
+            </div>
+            <form id="changePasswordForm" novalidate>
+              <div class="card-body">
+                <div class="form-group">
+                  <label for="currentPassword">Current password</label>
+                  <input type="password" id="currentPassword" autocomplete="current-password" required>
+                </div>
+                <div class="form-group">
+                  <label for="newPassword">New password</label>
+                  <input type="password" id="newPassword" autocomplete="new-password" required minlength="10"
+                    aria-describedby="pwPolicy">
+                  <p class="form-hint" id="pwPolicy">At least 10 characters, combining three of: lowercase
+                    letters, uppercase letters, numbers, symbols.</p>
+                </div>
+                <div class="form-group">
+                  <label for="confirmPassword">Confirm new password</label>
+                  <input type="password" id="confirmPassword" autocomplete="new-password" required>
+                </div>
+              </div>
+              <div class="modal-footer">
+                <button type="submit" class="btn btn-primary">Change password</button>
+              </div>
+            </form>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <!-- Leave request modal -->
+  <div class="modal" id="leaveModal" role="dialog" aria-modal="true" aria-labelledby="leaveModalTitle"
+    aria-hidden="true">
+    <div class="modal-content modal-sm">
+      <div class="modal-header">
+        <h3 id="leaveModalTitle">Request leave</h3>
+        <button type="button" class="modal-close" data-close-modal="leaveModal" aria-label="Close">×</button>
+      </div>
+      <form id="leaveForm" novalidate>
+        <div class="modal-body">
+          <div class="form-group">
+            <label for="leaveType">Leave type</label>
+            <select id="leaveType" name="leaveType" required></select>
+            <p class="form-hint" id="leaveTypeHint"></p>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="leaveStart">Start date</label>
+              <input type="date" id="leaveStart" name="startDate" required>
+            </div>
+            <div class="form-group">
+              <label for="leaveEnd">End date</label>
+              <input type="date" id="leaveEnd" name="endDate" required>
+            </div>
+          </div>
+          <p class="form-hint" id="leaveDaysHint"></p>
+          <div class="form-group">
+            <label for="leaveReason">Reason</label>
+            <textarea id="leaveReason" name="reason" required minlength="3" maxlength="500"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-close-modal="leaveModal">Cancel</button>
+          <button type="submit" class="btn btn-primary">Submit request</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Advance request modal -->
+  <div class="modal" id="advanceModal" role="dialog" aria-modal="true" aria-labelledby="advanceModalTitle"
+    aria-hidden="true">
+    <div class="modal-content modal-sm">
+      <div class="modal-header">
+        <h3 id="advanceModalTitle">Request a salary advance</h3>
+        <button type="button" class="modal-close" data-close-modal="advanceModal" aria-label="Close">×</button>
+      </div>
+      <form id="advanceForm" novalidate>
+        <div class="modal-body">
+          <div class="form-group">
+            <label for="advanceAmount">Amount</label>
+            <input type="number" id="advanceAmount" name="amount" min="1" step="1000" required
+              aria-describedby="advanceMaxHint">
+            <p class="form-hint" id="advanceMaxHint"></p>
+          </div>
+          <div class="form-group">
+            <label for="advanceInstalments">Repay over</label>
+            <select id="advanceInstalments" name="instalments"></select>
+            <p class="form-hint">Spreading repayment over more runs reduces each deduction.</p>
+          </div>
+          <div class="form-group">
+            <label for="advanceReason">Reason</label>
+            <textarea id="advanceReason" name="reason" required minlength="3" maxlength="500"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-close-modal="advanceModal">Cancel</button>
+          <button type="submit" class="btn btn-primary">Submit request</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="/js/app.js"></script>
+  <script src="/js/teacher.js"></script>
+</body>
+
+</html>

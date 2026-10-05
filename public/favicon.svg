@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#DC2626"/>
+      <stop offset="100%" stop-color="#7F1D1D"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background rounded square -->
+  <rect width="32" height="32" rx="6" ry="6" fill="url(#bg)"/>
+
+  <!-- White "E" -->
+  <text
+    x="3"
+    y="23"
+    font-family="'Arial Black', Arial, sans-serif"
+    font-weight="900"
+    font-size="19"
+    fill="#FFFFFF"
+    letter-spacing="-1"
+  >EP</text>
+
+  <!-- Red accent bar at bottom -->
+  <rect x="3" y="27" width="26" height="2.5" rx="1.25" fill="rgba(255,255,255,0.35)"/>
+</svg>

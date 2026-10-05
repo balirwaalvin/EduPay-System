@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="color-scheme" content="dark light">
+  <title>Administrator · EduPay</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+
+<body>
+  <a href="#mainContent" class="sr-only">Skip to main content</a>
+
+  <div class="dashboard">
+    <aside class="sidebar" aria-label="Main navigation">
+      <div class="sidebar-header">
+        <h2>Edu<span>Pay</span></h2>
+        <p class="user-role">Administrator</p>
+        <button type="button" class="mobile-close-btn" aria-label="Close navigation">✕</button>
+      </div>
+
+      <nav class="sidebar-nav">
+        <div class="nav-section">
+          <p class="nav-section-title">Overview</p>
+          <button type="button" class="nav-item" data-section="dashboard" data-title="Dashboard">
+            <span class="nav-icon" aria-hidden="true">📊</span> Dashboard
+          </button>
+        </div>
+
+        <div class="nav-section">
+          <p class="nav-section-title">Accounts</p>
+          <button type="button" class="nav-item" data-section="staff" data-title="Staff Accounts">
+            <span class="nav-icon" aria-hidden="true">👥</span> Staff Accounts
+          </button>
+        </div>
+
+        <div class="nav-section">
+          <p class="nav-section-title">System</p>
+          <button type="button" class="nav-item" data-section="config" data-title="Payroll Settings">
+            <span class="nav-icon" aria-hidden="true">⚙️</span> Payroll Settings
+          </button>
+          <button type="button" class="nav-item" data-section="reports" data-title="Payroll Reports">
+            <span class="nav-icon" aria-hidden="true">📈</span> Reports
+          </button>
+          <button type="button" class="nav-item" data-section="audit" data-title="Audit Log">
+            <span class="nav-icon" aria-hidden="true">📋</span> Audit Log
+          </button>
+          <button type="button" class="nav-item" data-section="mfa" data-title="Two-Factor Activity">
+            <span class="nav-icon" aria-hidden="true">🔑</span> Two-Factor Activity
+          </button>
+          <button type="button" class="nav-item" data-section="backup" data-title="Data Export">
+            <span class="nav-icon" aria-hidden="true">💾</span> Data Export
+          </button>
+        </div>
+
+        <div class="nav-section">
+          <p class="nav-section-title">Account</p>
+          <button type="button" class="nav-item" data-section="security" data-title="Security">
+            <span class="nav-icon" aria-hidden="true">🔒</span> Security
+          </button>
+        </div>
+      </nav>
+
+      <div class="sidebar-footer">
+        <button type="button" class="btn btn-secondary btn-block" data-action="logout">Sign out</button>
+      </div>
+    </aside>
+
+    <div class="main-content">
+      <header class="topbar">
+        <button type="button" class="menu-toggle" aria-label="Open navigation" aria-expanded="false">☰</button>
+        <h1 id="pageTitle">Dashboard</h1>
+        <div id="notificationBell"></div>
+        <div class="topbar-user">
+          <span class="user-avatar" aria-hidden="true"></span>
+          <span class="user-meta">
+            <span class="user-full-name"></span>
+            <span class="user-role-display"></span>
+          </span>
+        </div>
+      </header>
+
+      <main class="content-area" id="mainContent">
+
+        <!-- Dashboard -->
+        <section id="dashboard" class="page-section">
+          <div class="stats-grid">
+            <div class="stat-card">
+              <p class="stat-label">Total accounts</p>
+              <p class="stat-value" id="statUsers">—</p>
+              <p class="stat-hint" id="statPendingActivation"></p>
+            </div>
+            <div class="stat-card accent-info">
+              <p class="stat-label">Administrators</p>
+              <p class="stat-value" id="statAdmins">—</p>
+              <p class="stat-hint">Active</p>
+            </div>
+            <div class="stat-card accent-info">
+              <p class="stat-label">HR</p>
+              <p class="stat-value" id="statHr">—</p>
+              <p class="stat-hint">Active</p>
+            </div>
+            <div class="stat-card accent-info">
+              <p class="stat-label">Accountants</p>
+              <p class="stat-value" id="statAccountants">—</p>
+              <p class="stat-hint">Active</p>
+            </div>
+            <div class="stat-card accent-success">
+              <p class="stat-label">Teachers</p>
+              <p class="stat-value" id="statTeachers">—</p>
+              <p class="stat-hint">Active</p>
+            </div>
+            <div class="stat-card accent-warning">
+              <p class="stat-label">Payroll runs</p>
+              <p class="stat-value" id="statPayrolls">—</p>
+              <p class="stat-hint" id="statRecentPayroll"></p>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <h2>System health</h2>
+            </div>
+            <div class="card-body" id="healthList"></div>
+          </div>
+        </section>
+
+        <!-- Staff accounts -->
+        <section id="staff" class="page-section" hidden>
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h2>Staff accounts</h2>
+                <p class="card-subtitle">Teachers are managed from the HR dashboard, where payroll details are captured
+                </p>
+              </div>
+              <div class="card-actions">
+                <select id="roleFilter" aria-label="Filter by role">
+                  <option value="">All roles</option>
+                  <option value="admin">Administrators</option>
+                  <option value="hr">HR</option>
+                  <option value="accountant">Accountants</option>
+                  <option value="teacher">Teachers</option>
+                </select>
+                <button type="button" class="btn btn-primary" id="addStaffBtn">Add account</button>
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="toolbar">
+                <input type="search" id="staffSearch" class="search-field" placeholder="Search by name or username…"
+                  aria-label="Search accounts">
+                <span class="toolbar-count" id="staffCount"></span>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <caption class="sr-only">Staff accounts</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col" data-sort="fullName">Name</th>
+                      <th scope="col" data-sort="username">Username</th>
+                      <th scope="col" data-sort="role">Role</th>
+                      <th scope="col">Contact</th>
+                      <th scope="col">Two-factor</th>
+                      <th scope="col">Status</th>
+                      <th scope="col">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="staffTableBody"></tbody>
+                </table>
+              </div>
+              <div class="pager" id="staffPager"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Payroll settings -->
+        <section id="config" class="page-section" hidden>
+          <form id="configForm" novalidate>
+            <div class="card">
+              <div class="card-header">
+                <div>
+                  <h2>School details</h2>
+                  <p class="card-subtitle">Shown on payslips and reports</p>
+                </div>
+              </div>
+              <div class="card-body">
+                <div class="form-row">
+                  <div class="form-group">
+                    <label for="cfgSchoolName">School name</label>
+                    <input type="text" id="cfgSchoolName" name="schoolName" maxlength="120">
+                  </div>
+                  <div class="form-group">
+                    <label for="cfgCurrency">Currency code</label>
+                    <input type="text" id="cfgCurrency" name="currency" maxlength="8">
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-header">
+                <div>
+                  <h2>Tax and statutory deductions</h2>
+                  <p class="card-subtitle">Banded PAYE follows the URA monthly schedule for resident individuals</p>
+                </div>
+              </div>
+              <div class="card-body">
+                <div class="checkbox-row">
+                  <input type="checkbox" id="cfgTaxEnabled" name="taxEnabled">
+                  <label for="cfgTaxEnabled">Deduct PAYE from payroll</label>
+                </div>
+
+                <div class="form-row">
+                  <div class="form-group">
+                    <label for="cfgTaxMode">PAYE calculation</label>
+                    <select id="cfgTaxMode" name="taxMode">
+                      <option value="banded">Banded — URA monthly schedule (recommended)</option>
+                      <option value="flat">Flat percentage of basic salary (legacy)</option>
+                      <option value="none">Do not calculate PAYE</option>
+                    </select>
+                    <p class="form-hint">Flat mode is retained only so historical figures can be reproduced.</p>
+                  </div>
+                  <div class="form-group">
+                    <label for="cfgNssfEmployee">NSSF employee %</label>
+                    <input type="number" id="cfgNssfEmployee" name="nssfEmployeePercentage" min="0" max="30"
+                      step="0.5">
+                    <p class="form-hint">Deducted from the employee's pay</p>
+                  </div>
+                  <div class="form-group">
+                    <label for="cfgNssfEmployer">NSSF employer %</label>
+                    <input type="number" id="cfgNssfEmployer" name="nssfEmployerPercentage" min="0" max="30"
+                      step="0.5">
+                    <p class="form-hint">School's own contribution, tracked but not deducted</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-header">
+                <div>
+                  <h2>Pay protection and advances</h2>
+                  <p class="card-subtitle">These limits stop a deduction from driving net pay to zero</p>
+                </div>
+              </div>
+              <div class="card-body">
+                <div class="form-row">
+                  <div class="form-group">
+                    <label for="cfgMinNet">Minimum net pay %</label>
+                    <input type="number" id="cfgMinNet" name="minimumNetPercentage" min="0" max="90" step="1">
+                    <p class="form-hint">Advance instalments are trimmed to keep net pay above this share of gross</p>
+                  </div>
+                  <div class="form-group">
+                    <label for="cfgMaxAdvance">Maximum advance %</label>
+                    <input type="number" id="cfgMaxAdvance" name="maxAdvancePercentage" min="0" max="100" step="1">
+                    <p class="form-hint">Ceiling on a request, as a share of net pay</p>
+                  </div>
+                  <div class="form-group">
+                    <label for="cfgMaxInstalments">Maximum instalments</label>
+                    <input type="number" id="cfgMaxInstalments" name="maxAdvanceInstalments" min="1" max="24" step="1">
+                    <p class="form-hint">Payroll runs an advance may be spread over</p>
+                  </div>
+                  <div class="form-group">
+                    <label for="cfgLeaveDays">Default annual leave days</label>
+                    <input type="number" id="cfgLeaveDays" name="defaultAnnualLeaveDays" min="0" max="365" step="1">
+                    <p class="form-hint">Applied to new teachers unless overridden</p>
+                  </div>
+                </div>
+              </div>
+              <div class="modal-footer">
+                <button type="submit" class="btn btn-primary">Save settings</button>
+              </div>
+            </div>
+          </form>
+        </section>
+
+        <!-- Reports -->
+        <section id="reports" class="page-section" hidden>
+          <div class="card">
+            <div class="card-header">
+              <h2>Payroll reports</h2>
+            </div>
+            <div class="card-body">
+              <div class="table-wrap">
+                <table>
+                  <caption class="sr-only">Payroll runs</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Period</th>
+                      <th scope="col" class="numeric">Staff</th>
+                      <th scope="col" class="numeric">Gross</th>
+                      <th scope="col" class="numeric">Deductions</th>
+                      <th scope="col" class="numeric">Net</th>
+                      <th scope="col" class="numeric">Employer cost</th>
+                      <th scope="col">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody id="reportTableBody"></tbody>
+                </table>
+              </div>
+              <div class="pager" id="reportPager"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Audit log -->
+        <section id="audit" class="page-section" hidden>
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h2>Audit log</h2>
+                <p class="card-subtitle">Every privileged action, newest first</p>
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="toolbar">
+                <input type="search" id="auditUsername" class="search-field" placeholder="Filter by username…"
+                  aria-label="Filter the audit log by username">
+                <select id="auditAction" aria-label="Filter by action"></select>
+                <button type="button" class="btn btn-secondary" id="auditFilterBtn">Apply</button>
+                <button type="button" class="btn btn-secondary" id="auditResetBtn">Reset</button>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <caption class="sr-only">Audit log entries</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">When</th>
+                      <th scope="col">Who</th>
+                      <th scope="col">Action</th>
+                      <th scope="col">Detail</th>
+                      <th scope="col">IP</th>
+                    </tr>
+                  </thead>
+                  <tbody id="auditTableBody"></tbody>
+                </table>
+              </div>
+              <div class="pager">
+                <button type="button" class="btn btn-secondary" id="auditMoreBtn" hidden>Load more</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Two-factor activity -->
+        <section id="mfa" class="page-section" hidden>
+          <div class="alert alert-info">
+            <span class="alert-icon" aria-hidden="true">ℹ</span>
+            <span>Verification codes are emailed directly to each account owner and are never visible here.
+              This page shows only that a sign-in is in progress, so you can help someone who is stuck without
+              being able to sign in as them.</span>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h2>Sign-ins in progress</h2>
+                <p class="card-subtitle">Challenges that have not yet expired</p>
+              </div>
+              <div class="card-actions">
+                <button type="button" class="btn btn-secondary" id="mfaRefreshBtn">Refresh</button>
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="table-wrap">
+                <table>
+                  <caption class="sr-only">Outstanding two-factor challenges</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Account</th>
+                      <th scope="col">Role</th>
+                      <th scope="col">Method</th>
+                      <th scope="col">Sent to</th>
+                      <th scope="col" class="numeric">Failed attempts</th>
+                      <th scope="col">Expires</th>
+                    </tr>
+                  </thead>
+                  <tbody id="mfaTableBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Data export -->
+        <section id="backup" class="page-section" hidden>
+          <div class="card">
+            <div class="card-header">
+              <h2>Data export</h2>
+            </div>
+            <div class="card-body">
+              <p>Firebase takes managed, point-in-time backups of Firestore automatically. This export is for
+                ad-hoc inspection and migration, and omits password hashes and two-factor secrets.</p>
+              <button type="button" class="btn btn-primary" id="backupBtn">Download JSON export</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- Security -->
+        <section id="security" class="page-section" hidden>
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h2>Change password</h2>
+                <p class="card-subtitle">Signing in again will be required on your other devices</p>
+              </div>
+            </div>
+            <form id="changePasswordForm" novalidate>
+              <div class="card-body">
+                <div class="form-group">
+                  <label for="currentPassword">Current password</label>
+                  <input type="password" id="currentPassword" autocomplete="current-password" required>
+                </div>
+                <div class="form-group">
+                  <label for="newPassword">New password</label>
+                  <input type="password" id="newPassword" autocomplete="new-password" required minlength="10"
+                    aria-describedby="pwPolicy">
+                  <p class="form-hint" id="pwPolicy">At least 10 characters, combining three of: lowercase
+                    letters, uppercase letters, numbers, symbols.</p>
+                </div>
+                <div class="form-group">
+                  <label for="confirmPassword">Confirm new password</label>
+                  <input type="password" id="confirmPassword" autocomplete="new-password" required>
+                </div>
+              </div>
+              <div class="modal-footer">
+                <button type="submit" class="btn btn-primary">Change password</button>
+              </div>
+            </form>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <!-- Staff account modal -->
+  <div class="modal" id="staffModal" role="dialog" aria-modal="true" aria-labelledby="staffModalTitle"
+    aria-hidden="true">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="staffModalTitle">Add account</h3>
+        <button type="button" class="modal-close" data-close-modal="staffModal" aria-label="Close">×</button>
+      </div>
+      <form id="staffForm" novalidate>
+        <div class="modal-body">
+          <div class="form-row">
+            <div class="form-group">
+              <label for="uFullName">Full name</label>
+              <input type="text" id="uFullName" name="fullName" required minlength="2" maxlength="120">
+            </div>
+            <div class="form-group">
+              <label for="uRole">Role</label>
+              <select id="uRole" name="role" required>
+                <option value="hr">HR</option>
+                <option value="accountant">Accountant</option>
+                <option value="admin">Administrator</option>
+              </select>
+              <p class="form-hint">Teachers are created from the HR dashboard</p>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="uUsername">Username</label>
+              <input type="text" id="uUsername" name="username" required autocapitalize="none" spellcheck="false">
+              <p class="form-hint" id="uUsernameHint">3–32 characters: letters, numbers, dots, hyphens, underscores</p>
+            </div>
+            <div class="form-group">
+              <label for="uEmail">Email</label>
+              <input type="email" id="uEmail" name="email" autocomplete="email">
+              <p class="form-hint">With an email address, they receive a setup link and two-factor codes</p>
+            </div>
+            <div class="form-group">
+              <label for="uPhone">Phone</label>
+              <input type="tel" id="uPhone" name="phone">
+            </div>
+            <div class="form-group" id="departmentGroup" hidden>
+              <label for="uDepartment">Department</label>
+              <input type="text" id="uDepartment" name="department" maxlength="80">
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-close-modal="staffModal">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="staffSubmitBtn">Create account</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="/js/app.js"></script>
+  <script src="/js/admin.js"></script>
+</body>
+
+</html>

@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="color-scheme" content="dark light">
+  <title>Accountant · EduPay</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+
+<body>
+  <a href="#mainContent" class="sr-only">Skip to main content</a>
+
+  <div class="dashboard">
+    <aside class="sidebar" aria-label="Main navigation">
+      <div class="sidebar-header">
+        <h2>Edu<span>Pay</span></h2>
+        <p class="user-role">Accountant</p>
+        <button type="button" class="mobile-close-btn" aria-label="Close navigation">✕</button>
+      </div>
+
+      <nav class="sidebar-nav">
+        <div class="nav-section">
+          <p class="nav-section-title">Overview</p>
+          <button type="button" class="nav-item" data-section="dashboard" data-title="Dashboard">
+            <span class="nav-icon" aria-hidden="true">📊</span> Dashboard
+          </button>
+        </div>
+
+        <div class="nav-section">
+          <p class="nav-section-title">Payroll</p>
+          <button type="button" class="nav-item" data-section="payroll" data-title="Payroll Runs">
+            <span class="nav-icon" aria-hidden="true">💰</span> Payroll Runs
+          </button>
+          <button type="button" class="nav-item" data-section="payments" data-title="Record Payments">
+            <span class="nav-icon" aria-hidden="true">✅</span> Record Payments
+          </button>
+          <button type="button" class="nav-item" data-section="teachers" data-title="Teacher Records">
+            <span class="nav-icon" aria-hidden="true">👩‍🏫</span> Teacher Records
+          </button>
+        </div>
+
+        <div class="nav-section">
+          <p class="nav-section-title">Reporting</p>
+          <button type="button" class="nav-item" data-section="reports" data-title="Reports and Exports">
+            <span class="nav-icon" aria-hidden="true">📈</span> Reports
+          </button>
+        </div>
+
+        <div class="nav-section">
+          <p class="nav-section-title">Account</p>
+          <button type="button" class="nav-item" data-section="security" data-title="Security">
+            <span class="nav-icon" aria-hidden="true">🔒</span> Security
+          </button>
+        </div>
+      </nav>
+
+      <div class="sidebar-footer">
+        <button type="button" class="btn btn-secondary btn-block" data-action="logout">Sign out</button>
+      </div>
+    </aside>
+
+    <div class="main-content">
+      <header class="topbar">
+        <button type="button" class="menu-toggle" aria-label="Open navigation" aria-expanded="false">☰</button>
+        <h1 id="pageTitle">Dashboard</h1>
+        <div id="notificationBell"></div>
+        <div class="topbar-user">
+          <span class="user-avatar" aria-hidden="true"></span>
+          <span class="user-meta">
+            <span class="user-full-name"></span>
+            <span class="user-role-display"></span>
+          </span>
+        </div>
+      </header>
+
+      <main class="content-area" id="mainContent">
+
+        <!-- Dashboard -->
+        <section id="dashboard" class="page-section">
+          <div class="stats-grid">
+            <div class="stat-card">
+              <p class="stat-label">Active teachers</p>
+              <p class="stat-value" id="statTeachers">—</p>
+              <p class="stat-hint" id="statHalted"></p>
+            </div>
+            <div class="stat-card accent-warning">
+              <p class="stat-label">Awaiting HR approval</p>
+              <p class="stat-value" id="statAwaiting">—</p>
+              <p class="stat-hint">Runs you have processed</p>
+            </div>
+            <div class="stat-card accent-info">
+              <p class="stat-label">Ready to pay</p>
+              <p class="stat-value" id="statReadyToPay">—</p>
+              <p class="stat-hint">Approved, not yet paid</p>
+            </div>
+            <div class="stat-card accent-success">
+              <p class="stat-label">Total paid out</p>
+              <p class="stat-value" id="statTotalPaid">—</p>
+              <p class="stat-hint">Approved and paid runs</p>
+            </div>
+            <div class="stat-card accent-warning">
+              <p class="stat-label">Advances outstanding</p>
+              <p class="stat-value" id="statPendingAdvance">—</p>
+              <p class="stat-hint">Still to be recovered</p>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h2>Process a payroll run</h2>
+                <p class="card-subtitle">Processed runs go to HR for approval before any payment can be recorded</p>
+              </div>
+            </div>
+            <form id="processForm" novalidate>
+              <div class="card-body">
+                <div class="form-row">
+                  <div class="form-group">
+                    <label for="processMonth">Month</label>
+                    <select id="processMonth" name="month" required></select>
+                  </div>
+                  <div class="form-group">
+                    <label for="processYear">Year</label>
+                    <select id="processYear" name="year" required></select>
+                  </div>
+                </div>
+                <div id="processNotice"></div>
+              </div>
+              <div class="modal-footer">
+                <button type="submit" class="btn btn-primary" id="processBtn">Process payroll</button>
+              </div>
+            </form>
+          </div>
+        </section>
+
+        <!-- Payroll runs -->
+        <section id="payroll" class="page-section" hidden>
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h2>Payroll runs</h2>
+                <p class="card-subtitle">Reprocessing archives the previous version rather than deleting it</p>
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="toolbar">
+                <input type="search" id="payrollSearch" class="search-field" placeholder="Search by period…"
+                  aria-label="Search payroll runs">
+                <span class="toolbar-count" id="payrollCount"></span>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <caption class="sr-only">Payroll runs</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col" data-sort="periodSort">Period</th>
+                      <th scope="col" class="numeric" data-sort="employeeCount">Staff</th>
+                      <th scope="col" class="numeric" data-sort="totalGross">Gross</th>
+                      <th scope="col" class="numeric" data-sort="totalNet">Net</th>
+                      <th scope="col" data-sort="status">Status</th>
+                      <th scope="col">Processed by</th>
+                      <th scope="col">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="payrollTableBody"></tbody>
+                </table>
+              </div>
+              <div class="pager" id="payrollPager"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Record payments -->
+        <section id="payments" class="page-section" hidden>
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h2>Record payments</h2>
+                <p class="card-subtitle">Only runs that HR has approved can be paid</p>
+              </div>
+              <div class="card-actions">
+                <select id="paymentPayrollSelect" aria-label="Choose a payroll run"></select>
+                <button type="button" class="btn btn-secondary" id="markAllPaidBtn" hidden>Mark all paid</button>
+              </div>
+            </div>
+            <div class="card-body">
+              <div id="paymentNotice"></div>
+              <div class="toolbar">
+                <input type="search" id="paymentSearch" class="search-field" placeholder="Search by name or ID…"
+                  aria-label="Search payslips">
+                <span class="toolbar-count" id="paymentCount"></span>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <caption class="sr-only">Payslips on the selected run</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col" data-sort="teacherName">Employee</th>
+                      <th scope="col" class="numeric" data-sort="grossSalary">Gross</th>
+                      <th scope="col" class="numeric" data-sort="totalDeductions">Deductions</th>
+                      <th scope="col" class="numeric" data-sort="netSalary">Net pay</th>
+                      <th scope="col" data-sort="paymentStatus">Status</th>
+                      <th scope="col">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="paymentTableBody"></tbody>
+                </table>
+              </div>
+              <div class="pager" id="paymentPager"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Teacher records -->
+        <section id="teachers" class="page-section" hidden>
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h2>Teacher records</h2>
+                <p class="card-subtitle">Pause a teacher to withhold them from upcoming payroll runs</p>
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="toolbar">
+                <input type="search" id="teacherSearch" class="search-field" placeholder="Search by name or ID…"
+                  aria-label="Search teachers">
+                <span class="toolbar-count" id="teacherCount"></span>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <caption class="sr-only">Teacher payroll records</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col" data-sort="fullName">Teacher</th>
+                      <th scope="col" data-sort="salaryScale">Scale</th>
+                      <th scope="col" class="numeric" data-sort="basicSalary">Basic</th>
+                      <th scope="col">Paid via</th>
+                      <th scope="col" class="numeric" data-sort="nextPayrollAdvance">Next advance</th>
+                      <th scope="col">Payroll</th>
+                      <th scope="col">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="teacherTableBody"></tbody>
+                </table>
+              </div>
+              <div class="pager" id="teacherPager"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Reports -->
+        <section id="reports" class="page-section" hidden>
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h2>Reports and exports</h2>
+                <p class="card-subtitle">Download a payroll run, or the statutory totals for your returns</p>
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="reportYear">Filter by year</label>
+                  <select id="reportYear"></select>
+                </div>
+                <div class="form-group">
+                  <label for="reportMonth">Filter by month</label>
+                  <select id="reportMonth"></select>
+                </div>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <caption class="sr-only">Payroll reports</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Period</th>
+                      <th scope="col" class="numeric">Staff</th>
+                      <th scope="col" class="numeric">Gross</th>
+                      <th scope="col" class="numeric">Net</th>
+                      <th scope="col" class="numeric">Employer cost</th>
+                      <th scope="col">Status</th>
+                      <th scope="col">Export</th>
+                    </tr>
+                  </thead>
+                  <tbody id="reportTableBody"></tbody>
+                </table>
+              </div>
+              <div class="pager" id="reportPager"></div>
+            </div>
+          </div>
+
+          <div class="card" id="statutoryCard" hidden>
+            <div class="card-header">
+              <div>
+                <h2>Statutory summary</h2>
+                <p class="card-subtitle" id="statutoryPeriod"></p>
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="stats-grid" id="statutoryGrid"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Security -->
+        <section id="security" class="page-section" hidden>
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h2>Change password</h2>
+                <p class="card-subtitle">Signing in again will be required on your other devices</p>
+              </div>
+            </div>
+            <form id="changePasswordForm" novalidate>
+              <div class="card-body">
+                <div class="form-group">
+                  <label for="currentPassword">Current password</label>
+                  <input type="password" id="currentPassword" autocomplete="current-password" required>
+                </div>
+                <div class="form-group">
+                  <label for="newPassword">New password</label>
+                  <input type="password" id="newPassword" autocomplete="new-password" required minlength="10"
+                    aria-describedby="pwPolicy">
+                  <p class="form-hint" id="pwPolicy">At least 10 characters, combining three of: lowercase
+                    letters, uppercase letters, numbers, symbols.</p>
+                </div>
+                <div class="form-group">
+                  <label for="confirmPassword">Confirm new password</label>
+                  <input type="password" id="confirmPassword" autocomplete="new-password" required>
+                </div>
+              </div>
+              <div class="modal-footer">
+                <button type="submit" class="btn btn-primary">Change password</button>
+              </div>
+            </form>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <!-- Payroll detail modal -->
+  <div class="modal" id="payrollDetailModal" role="dialog" aria-modal="true"
+    aria-labelledby="payrollDetailTitle" aria-hidden="true">
+    <div class="modal-content modal-lg">
+      <div class="modal-header">
+        <h3 id="payrollDetailTitle">Payroll detail</h3>
+        <button type="button" class="modal-close" data-close-modal="payrollDetailModal" aria-label="Close">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="table-wrap">
+          <table>
+            <caption class="sr-only">Payroll lines</caption>
+            <thead>
+              <tr>
+                <th scope="col">Employee</th>
+                <th scope="col" class="numeric">Gross</th>
+                <th scope="col" class="numeric">PAYE</th>
+                <th scope="col" class="numeric">NSSF</th>
+                <th scope="col" class="numeric">Advance</th>
+                <th scope="col" class="numeric">Net</th>
+                <th scope="col">Payslip</th>
+              </tr>
+            </thead>
+            <tbody id="payrollDetailBody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-close-modal="payrollDetailModal">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Halt payroll modal -->
+  <div class="modal" id="haltModal" role="dialog" aria-modal="true" aria-labelledby="haltModalTitle"
+    aria-hidden="true">
+    <div class="modal-content modal-sm">
+      <div class="modal-header">
+        <h3 id="haltModalTitle">Pause payroll</h3>
+        <button type="button" class="modal-close" data-close-modal="haltModal" aria-label="Close">×</button>
+      </div>
+      <form id="haltForm" novalidate>
+        <div class="modal-body">
+          <p id="haltTeacherName"></p>
+          <div class="form-group">
+            <label for="haltReason">Reason</label>
+            <textarea id="haltReason" name="reason" required minlength="3" maxlength="300"></textarea>
+            <p class="form-hint">The teacher and HR are both notified, and the reason is recorded in the audit log.</p>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-close-modal="haltModal">Cancel</button>
+          <button type="submit" class="btn btn-warning">Pause payroll</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Record payment modal -->
+  <div class="modal" id="paymentModal" role="dialog" aria-modal="true" aria-labelledby="paymentModalTitle"
+    aria-hidden="true">
+    <div class="modal-content modal-sm">
+      <div class="modal-header">
+        <h3 id="paymentModalTitle">Record payment</h3>
+        <button type="button" class="modal-close" data-close-modal="paymentModal" aria-label="Close">×</button>
+      </div>
+      <form id="paymentForm" novalidate>
+        <div class="modal-body">
+          <p id="paymentSummary"></p>
+          <div class="form-group">
+            <label for="paymentReference">Payment reference <span class="form-hint">(optional)</span></label>
+            <input type="text" id="paymentReference" name="reference" maxlength="80"
+              placeholder="Bank transfer or mobile money reference">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-close-modal="paymentModal">Cancel</button>
+          <button type="submit" class="btn btn-success">Mark as paid</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="/js/app.js"></script>
+  <script src="/js/accountant.js"></script>
+</body>
+
+</html>

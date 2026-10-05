@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="color-scheme" content="dark light">
+  <title>HR · EduPay</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+
+<body>
+  <a href="#mainContent" class="sr-only">Skip to main content</a>
+
+  <div class="dashboard">
+    <aside class="sidebar" aria-label="Main navigation">
+      <div class="sidebar-header">
+        <h2>Edu<span>Pay</span></h2>
+        <p class="user-role">HR</p>
+        <button type="button" class="mobile-close-btn" aria-label="Close navigation">✕</button>
+      </div>
+
+      <nav class="sidebar-nav">
+        <div class="nav-section">
+          <p class="nav-section-title">Overview</p>
+          <button type="button" class="nav-item" data-section="dashboard" data-title="Dashboard">
+            <span class="nav-icon" aria-hidden="true">📊</span> Dashboard
+          </button>
+        </div>
+
+        <div class="nav-section">
+          <p class="nav-section-title">People</p>
+          <button type="button" class="nav-item" data-section="teachers" data-title="Teachers">
+            <span class="nav-icon" aria-hidden="true">👩‍🏫</span> Teachers
+          </button>
+          <button type="button" class="nav-item" data-section="salaries" data-title="Salary Structures">
+            <span class="nav-icon" aria-hidden="true">💳</span> Salary Structures
+          </button>
+        </div>
+
+        <div class="nav-section">
+          <p class="nav-section-title">Approvals</p>
+          <button type="button" class="nav-item" data-section="payrollApproval" data-title="Payroll Approval">
+            <span class="nav-icon" aria-hidden="true">✅</span> Payroll Approval
+            <span class="nav-badge" id="navPayrollBadge" hidden>0</span>
+          </button>
+          <button type="button" class="nav-item" data-section="leave" data-title="Leave Requests">
+            <span class="nav-icon" aria-hidden="true">🗓</span> Leave Requests
+            <span class="nav-badge" id="navLeaveBadge" hidden>0</span>
+          </button>
+          <button type="button" class="nav-item" data-section="advances" data-title="Advance Requests">
+            <span class="nav-icon" aria-hidden="true">💵</span> Advances
+            <span class="nav-badge" id="navAdvanceBadge" hidden>0</span>
+          </button>
+        </div>
+
+        <div class="nav-section">
+          <p class="nav-section-title">Account</p>
+          <button type="button" class="nav-item" data-section="security" data-title="Security">
+            <span class="nav-icon" aria-hidden="true">🔒</span> Security
+          </button>
+        </div>
+      </nav>
+
+      <div class="sidebar-footer">
+        <button type="button" class="btn btn-secondary btn-block" data-action="logout">Sign out</button>
+      </div>
+    </aside>
+
+    <div class="main-content">
+      <header class="topbar">
+        <button type="button" class="menu-toggle" aria-label="Open navigation" aria-expanded="false">☰</button>
+        <h1 id="pageTitle">Dashboard</h1>
+        <div id="notificationBell"></div>
+        <div class="topbar-user">
+          <span class="user-avatar" aria-hidden="true"></span>
+          <span class="user-meta">
+            <span class="user-full-name"></span>
+            <span class="user-role-display"></span>
+          </span>
+        </div>
+      </header>
+
+      <main class="content-area" id="mainContent">
+
+        <!-- Dashboard -->
+        <section id="dashboard" class="page-section">
+          <div class="stats-grid">
+            <div class="stat-card">
+              <p class="stat-label">Active teachers</p>
+              <p class="stat-value" id="statTeachers">—</p>
+              <p class="stat-hint" id="statHalted"></p>
+            </div>
+            <div class="stat-card accent-warning">
+              <p class="stat-label">Payroll to approve</p>
+              <p class="stat-value" id="statAwaiting">—</p>
+              <p class="stat-hint">Processed, awaiting you</p>
+            </div>
+            <div class="stat-card accent-info">
+              <p class="stat-label">Leave requests</p>
+              <p class="stat-value" id="statLeave">—</p>
+              <p class="stat-hint">Awaiting a decision</p>
+            </div>
+            <div class="stat-card accent-info">
+              <p class="stat-label">Advance requests</p>
+              <p class="stat-value" id="statAdvances">—</p>
+              <p class="stat-hint">Awaiting a decision</p>
+            </div>
+            <div class="stat-card accent-warning">
+              <p class="stat-label">Not yet activated</p>
+              <p class="stat-value" id="statPendingActivation">—</p>
+              <p class="stat-hint">Teachers who have not set a password</p>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <h2>Needs your attention</h2>
+            </div>
+            <div class="card-body" id="attentionList"></div>
+          </div>
+        </section>
+
+        <!-- Teachers -->
+        <section id="teachers" class="page-section" hidden>
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h2>Teachers</h2>
+                <p class="card-subtitle">New teachers receive an emailed link to set their own password</p>
+              </div>
+              <div class="card-actions">
+                <label class="checkbox-row" style="margin:0">
+                  <input type="checkbox" id="showInactiveTeachers">
+                  <span>Show deactivated</span>
+                </label>
+                <button type="button" class="btn btn-primary" id="addTeacherBtn">Add teacher</button>
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="toolbar">
+                <input type="search" id="teacherSearch" class="search-field" placeholder="Search by name, ID or scale…"
+                  aria-label="Search teachers">
+                <span class="toolbar-count" id="teacherCount"></span>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <caption class="sr-only">Teachers</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col" data-sort="fullName">Teacher</th>
+                      <th scope="col" data-sort="position">Position</th>
+                      <th scope="col" data-sort="salaryScale">Scale</th>
+                      <th scope="col">Contact</th>
+                      <th scope="col">Paid via</th>
+                      <th scope="col">Status</th>
+                      <th scope="col">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="teacherTableBody"></tbody>
+                </table>
+              </div>
+              <div class="pager" id="teacherPager"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Salary structures -->
+        <section id="salaries" class="page-section" hidden>
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h2>Salary structures</h2>
+                <p class="card-subtitle">PAYE is calculated from the URA banded schedule, not a flat percentage</p>
+              </div>
+              <div class="card-actions">
+                <button type="button" class="btn btn-primary" id="addScaleBtn">Add scale</button>
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="table-wrap">
+                <table>
+                  <caption class="sr-only">Salary structures</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col" data-sort="id">Scale</th>
+                      <th scope="col" class="numeric" data-sort="basicSalary">Basic</th>
+                      <th scope="col" class="numeric">Housing</th>
+                      <th scope="col" class="numeric">Transport</th>
+                      <th scope="col" class="numeric">Medical</th>
+                      <th scope="col" class="numeric">Other</th>
+                      <th scope="col" class="numeric">Gross</th>
+                      <th scope="col">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="scaleTableBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Payroll approval -->
+        <section id="payrollApproval" class="page-section" hidden>
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h2>Payroll approval</h2>
+                <p class="card-subtitle">You cannot approve a run you processed yourself</p>
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="table-wrap">
+                <table>
+                  <caption class="sr-only">Payroll runs</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Period</th>
+                      <th scope="col" class="numeric">Staff</th>
+                      <th scope="col" class="numeric">Gross</th>
+                      <th scope="col" class="numeric">Net</th>
+                      <th scope="col" class="numeric">Employer cost</th>
+                      <th scope="col">Status</th>
+                      <th scope="col">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="approvalTableBody"></tbody>
+                </table>
+              </div>
+              <div class="pager" id="approvalPager"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Leave -->
+        <section id="leave" class="page-section" hidden>
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h2>Leave requests</h2>
+                <p class="card-subtitle">Approving unpaid leave reduces that teacher's basic pay pro rata</p>
+              </div>
+              <div class="card-actions">
+                <select id="leaveStatusFilter" aria-label="Filter by status">
+                  <option value="Pending">Pending</option>
+                  <option value="">All statuses</option>
+                  <option value="Approved">Approved</option>
+                  <option value="Rejected">Rejected</option>
+                  <option value="Cancelled">Withdrawn</option>
+                </select>
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="toolbar">
+                <input type="search" id="leaveSearch" class="search-field" placeholder="Search by teacher…"
+                  aria-label="Search leave requests">
+                <span class="toolbar-count" id="leaveCount"></span>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <caption class="sr-only">Leave requests</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col" data-sort="fullName">Teacher</th>
+                      <th scope="col" data-sort="leaveType">Type</th>
+                      <th scope="col">Dates</th>
+                      <th scope="col" class="numeric" data-sort="days">Days</th>
+                      <th scope="col">Reason</th>
+                      <th scope="col">Status</th>
+                      <th scope="col">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="leaveTableBody"></tbody>
+                </table>
+              </div>
+              <div class="pager" id="leavePager"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Advances -->
+        <section id="advances" class="page-section" hidden>
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h2>Advance requests</h2>
+                <p class="card-subtitle">Set the number of payroll runs an advance is recovered over</p>
+              </div>
+              <div class="card-actions">
+                <select id="advanceStatusFilter" aria-label="Filter by status">
+                  <option value="Pending">Pending</option>
+                  <option value="">All statuses</option>
+                  <option value="Approved">Approved</option>
+                  <option value="Repaying">Repaying</option>
+                  <option value="Settled">Settled</option>
+                  <option value="Rejected">Rejected</option>
+                </select>
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="toolbar">
+                <input type="search" id="advanceSearch" class="search-field" placeholder="Search by teacher…"
+                  aria-label="Search advance requests">
+                <span class="toolbar-count" id="advanceCount"></span>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <caption class="sr-only">Advance requests</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col" data-sort="fullName">Teacher</th>
+                      <th scope="col" class="numeric" data-sort="amount">Amount</th>
+                      <th scope="col" class="numeric">Outstanding</th>
+                      <th scope="col">Instalments</th>
+                      <th scope="col">Reason</th>
+                      <th scope="col">Status</th>
+                      <th scope="col">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="advanceTableBody"></tbody>
+                </table>
+              </div>
+              <div class="pager" id="advancePager"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Security -->
+        <section id="security" class="page-section" hidden>
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h2>Change password</h2>
+                <p class="card-subtitle">Signing in again will be required on your other devices</p>
+              </div>
+            </div>
+            <form id="changePasswordForm" novalidate>
+              <div class="card-body">
+                <div class="form-group">
+                  <label for="currentPassword">Current password</label>
+                  <input type="password" id="currentPassword" autocomplete="current-password" required>
+                </div>
+                <div class="form-group">
+                  <label for="newPassword">New password</label>
+                  <input type="password" id="newPassword" autocomplete="new-password" required minlength="10"
+                    aria-describedby="pwPolicy">
+                  <p class="form-hint" id="pwPolicy">At least 10 characters, combining three of: lowercase
+                    letters, uppercase letters, numbers, symbols.</p>
+                </div>
+                <div class="form-group">
+                  <label for="confirmPassword">Confirm new password</label>
+                  <input type="password" id="confirmPassword" autocomplete="new-password" required>
+                </div>
+              </div>
+              <div class="modal-footer">
+                <button type="submit" class="btn btn-primary">Change password</button>
+              </div>
+            </form>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <!-- Teacher modal -->
+  <div class="modal" id="teacherModal" role="dialog" aria-modal="true" aria-labelledby="teacherModalTitle"
+    aria-hidden="true">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="teacherModalTitle">Add teacher</h3>
+        <button type="button" class="modal-close" data-close-modal="teacherModal" aria-label="Close">×</button>
+      </div>
+      <form id="teacherForm" novalidate>
+        <div class="modal-body">
+          <div class="form-row">
+            <div class="form-group">
+              <label for="tFullName">Full name</label>
+              <input type="text" id="tFullName" name="fullName" required minlength="2" maxlength="120">
+            </div>
+            <div class="form-group">
+              <label for="tUsername">Username <span class="form-hint">(optional)</span></label>
+              <input type="text" id="tUsername" name="username" autocapitalize="none" spellcheck="false">
+              <p class="form-hint" id="tUsernameHint">Generated from the name if left blank</p>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="tEmail">Email</label>
+              <input type="email" id="tEmail" name="email" autocomplete="email">
+              <p class="form-hint">Used to send the password setup link</p>
+            </div>
+            <div class="form-group">
+              <label for="tPhone">Phone</label>
+              <input type="tel" id="tPhone" name="phone">
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="tPosition">Position</label>
+              <input type="text" id="tPosition" name="position" maxlength="80">
+            </div>
+            <div class="form-group">
+              <label for="tSalaryScale">Salary scale</label>
+              <select id="tSalaryScale" name="salaryScale" required></select>
+            </div>
+            <div class="form-group">
+              <label for="tDateJoined">Date joined</label>
+              <input type="date" id="tDateJoined" name="dateJoined">
+            </div>
+            <div class="form-group">
+              <label for="tLeaveDays">Annual leave days</label>
+              <input type="number" id="tLeaveDays" name="leaveEntitlementDays" min="0" max="365">
+            </div>
+          </div>
+
+          <hr class="form-divider">
+          <p class="form-legend">How this teacher is paid</p>
+
+          <div class="form-group">
+            <label for="tPaymentMethod">Payment method</label>
+            <select id="tPaymentMethod" name="paymentMethod">
+              <option value="bank">Bank transfer</option>
+              <option value="mobile_money">Mobile money</option>
+            </select>
+          </div>
+
+          <div id="tBankFields">
+            <div class="form-row">
+              <div class="form-group">
+                <label for="tBankName">Bank name</label>
+                <input type="text" id="tBankName" name="bankName">
+              </div>
+              <div class="form-group">
+                <label for="tBankAccountName">Account name</label>
+                <input type="text" id="tBankAccountName" name="bankAccountName">
+              </div>
+              <div class="form-group">
+                <label for="tBankAccountNumber">Account number</label>
+                <input type="text" id="tBankAccountNumber" name="bankAccountNumber">
+              </div>
+            </div>
+          </div>
+
+          <div id="tMomoFields" hidden>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="tMomoProvider">Provider</label>
+                <input type="text" id="tMomoProvider" name="mobileMoneyProvider" placeholder="MTN, Airtel…">
+              </div>
+              <div class="form-group">
+                <label for="tMomoNumber">Mobile number</label>
+                <input type="tel" id="tMomoNumber" name="mobileMoneyNumber">
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-close-modal="teacherModal">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="teacherSubmitBtn">Add teacher</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Salary scale modal -->
+  <div class="modal" id="scaleModal" role="dialog" aria-modal="true" aria-labelledby="scaleModalTitle"
+    aria-hidden="true">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="scaleModalTitle">Add salary scale</h3>
+        <button type="button" class="modal-close" data-close-modal="scaleModal" aria-label="Close">×</button>
+      </div>
+      <form id="scaleForm" novalidate>
+        <div class="modal-body">
+          <div class="form-group">
+            <label for="sScale">Scale name</label>
+            <input type="text" id="sScale" name="salaryScale" required maxlength="60" placeholder="Scale_6">
+            <p class="form-hint" id="sScaleHint">Letters, numbers, spaces, hyphens and underscores</p>
+          </div>
+
+          <p class="form-legend">Earnings</p>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="sBasic">Basic salary</label>
+              <input type="number" id="sBasic" name="basicSalary" min="0" step="1000" required>
+            </div>
+            <div class="form-group">
+              <label for="sHousing">Housing allowance</label>
+              <input type="number" id="sHousing" name="housingAllowance" min="0" step="1000" value="0">
+            </div>
+            <div class="form-group">
+              <label for="sTransport">Transport allowance</label>
+              <input type="number" id="sTransport" name="transportAllowance" min="0" step="1000" value="0">
+            </div>
+            <div class="form-group">
+              <label for="sMedical">Medical allowance</label>
+              <input type="number" id="sMedical" name="medicalAllowance" min="0" step="1000" value="0">
+            </div>
+            <div class="form-group">
+              <label for="sOtherAllowance">Other allowance</label>
+              <input type="number" id="sOtherAllowance" name="otherAllowance" min="0" step="1000" value="0">
+            </div>
+          </div>
+
+          <hr class="form-divider">
+          <p class="form-legend">Deductions</p>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="sNssf">NSSF employee %</label>
+              <input type="number" id="sNssf" name="nssfPercentage" min="0" max="30" step="0.5" value="5">
+            </div>
+            <div class="form-group">
+              <label for="sLoan">Loan repayment</label>
+              <input type="number" id="sLoan" name="loanDeduction" min="0" step="1000" value="0">
+            </div>
+            <div class="form-group">
+              <label for="sOtherDeduction">Other deduction</label>
+              <input type="number" id="sOtherDeduction" name="otherDeduction" min="0" step="1000" value="0">
+            </div>
+            <div class="form-group">
+              <label for="sTax">Flat tax % <span class="form-hint">(legacy)</span></label>
+              <input type="number" id="sTax" name="taxPercentage" min="0" max="100" step="0.5" value="0">
+              <p class="form-hint">Only used if the system is switched to flat tax mode</p>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-close-modal="scaleModal">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save scale</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Decision modal, shared by leave and advances -->
+  <div class="modal" id="decisionModal" role="dialog" aria-modal="true" aria-labelledby="decisionModalTitle"
+    aria-hidden="true">
+    <div class="modal-content modal-sm">
+      <div class="modal-header">
+        <h3 id="decisionModalTitle">Decision</h3>
+        <button type="button" class="modal-close" data-close-modal="decisionModal" aria-label="Close">×</button>
+      </div>
+      <form id="decisionForm" novalidate>
+        <div class="modal-body">
+          <p id="decisionSummary"></p>
+          <div class="form-group" id="instalmentGroup" hidden>
+            <label for="decisionInstalments">Recover over</label>
+            <select id="decisionInstalments" name="instalments"></select>
+          </div>
+          <div class="form-group">
+            <label for="decisionNote">Note <span class="form-hint">(optional, shared with the teacher)</span></label>
+            <textarea id="decisionNote" name="note" maxlength="300"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-close-modal="decisionModal">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="decisionSubmitBtn">Confirm</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="/js/app.js"></script>
+  <script src="/js/hr.js"></script>
+</body>
+
+</html>
