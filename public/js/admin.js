@@ -201,9 +201,9 @@ async function renderHealth(stats) {
     try {
         const ready = await fetch('/readyz').then(r => r.json());
 
-        items.push(ready.firestore === 'connected'
-            ? ['success', `Firestore is connected (project ${ready.projectId}).`]
-            : ['danger', 'Firestore is not reachable. Payroll cannot be processed.']);
+        items.push(ready.database === 'connected'
+            ? ['success', `Database connected — ${ready.databaseName} on ${ready.databaseVersion}.`]
+            : ['danger', 'The database is not reachable. Payroll cannot be processed.']);
 
         if (ready.email !== 'configured') {
             items.push(['warning',
@@ -508,7 +508,10 @@ async function loadReports() {
     }
 }
 
-/** Cursor-paginated audit log: Firestore has no OFFSET. */
+/**
+ * Keyset-paginated audit log. The server pages on a monotonic id rather than
+ * OFFSET, which stays fast at any depth.
+ */
 async function loadAudit({ reset }) {
     const body = document.getElementById('auditTableBody');
     const moreBtn = document.getElementById('auditMoreBtn');
