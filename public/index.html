@@ -16,7 +16,10 @@
   <meta name="color-scheme" content="light">
   <meta name="theme-color" content="#0B655F">
   <title>Sign in · EduPay</title>
-  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="icon" href="/favicon.ico" sizes="48x48">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" sizes="any">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="manifest" href="/site.webmanifest">
   <link rel="stylesheet" href="/css/styles.css">
 </head>
 
@@ -26,7 +29,7 @@
     <!-- Brand panel. Decorative, so it is skipped by screen readers. -->
     <section class="auth-brand">
       <div class="auth-brand-mark">
-        <span class="auth-brand-badge" aria-hidden="true">₵</span>
+        <img class="auth-brand-badge" src="/logo.svg" alt="" width="42" height="42">
         <span>EduPay</span>
       </div>
 
@@ -68,8 +71,8 @@
             <div class="input-reveal">
               <input type="password" id="password" name="password" autocomplete="current-password" required
                 placeholder="Your password">
-              <button type="button" class="reveal-btn" data-reveal="password" aria-label="Show password"
-                aria-pressed="false">👁</button>
+              <button type="button" class="reveal-btn" data-reveal="password"
+                aria-label="Show password" aria-pressed="false"></button>
             </div>
           </div>
 
@@ -98,6 +101,7 @@
     </section>
   </main>
 
+  <script src="/js/icons.js"></script>
   <script src="/js/app.js"></script>
   <script src="/js/login.js"></script>
   <script type="module" src="/js/analytics-init.js"></script>

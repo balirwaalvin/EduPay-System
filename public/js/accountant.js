@@ -299,7 +299,7 @@ async function processPayroll(event) {
     const existing = allPayrollRuns.find(run => run.month === month && run.year === year);
     if (existing && ['approved', 'paid'].includes(existing.status)) {
         notice.innerHTML = html`<div class="alert alert-danger" role="alert">
-      <span class="alert-icon" aria-hidden="true">⚠</span>
+      <span class="alert-icon">${raw(icon('alert', { size: 16 }))}</span>
       <span>${periodLabel(month, year)} has already been ${existing.status} and cannot be reprocessed.</span>
     </div>`;
         return;
@@ -325,7 +325,7 @@ async function processPayroll(event) {
 
             const notes = (result.notes || []).map(note => html`<li>${note}</li>`).join('');
             notice.innerHTML = html`<div class="alert alert-success" role="status">
-        <span class="alert-icon" aria-hidden="true">✓</span>
+        <span class="alert-icon">${raw(icon('check', { size: 16 }))}</span>
         <span>
           <strong>${result.message}</strong><br>
           ${result.employeeCount} employee(s) · Gross ${formatCurrency(result.totalGross)} ·
@@ -339,7 +339,7 @@ async function processPayroll(event) {
             loadPayrollRuns();
         } catch (err) {
             notice.innerHTML = html`<div class="alert alert-danger" role="alert">
-        <span class="alert-icon" aria-hidden="true">⚠</span>
+        <span class="alert-icon">${raw(icon('alert', { size: 16 }))}</span>
         <span>${err.message}</span>
       </div>`;
         }
@@ -419,7 +419,7 @@ function populatePaymentSelector() {
     const notice = document.getElementById('paymentNotice');
     if (!payable.length) {
         notice.innerHTML = html`<div class="alert alert-info">
-      <span class="alert-icon" aria-hidden="true">ℹ</span>
+      <span class="alert-icon">${raw(icon('info', { size: 16 }))}</span>
       <span>No payroll run has been approved yet. HR must approve a processed run before payments can be recorded
       against it.</span>
     </div>`;

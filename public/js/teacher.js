@@ -181,7 +181,7 @@ async function loadDashboard() {
         const banner = document.getElementById('haltBanner');
         if (stats.payrollHalted) {
             banner.innerHTML = html`<div class="alert alert-warning" role="alert">
-        <span class="alert-icon" aria-hidden="true">⚠</span>
+        <span class="alert-icon">${raw(icon('alert', { size: 16 }))}</span>
         <span><strong>Your payroll is paused.</strong>
         ${stats.payrollHaltReason ? `Reason: ${stats.payrollHaltReason}.` : ''}
         You will not be included in the next payroll run — contact HR if this is unexpected.</span>

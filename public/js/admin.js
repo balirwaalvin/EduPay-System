@@ -227,7 +227,7 @@ async function renderHealth(stats) {
 
     host.innerHTML = items.map(([level, message]) => html`
     <div class="alert alert-${raw(level)}">
-      <span class="alert-icon" aria-hidden="true">${level === 'success' ? '✓' : level === 'danger' ? '✕' : '⚠'}</span>
+      <span class="alert-icon">${raw(icon(level === 'success' ? 'check' : level === 'danger' ? 'close' : 'alert', { size: 16 }))}</span>
       <span>${message}</span>
     </div>`).join('');
 }

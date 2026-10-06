@@ -6,8 +6,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="robots" content="noindex, nofollow">
   <meta name="color-scheme" content="dark light">
+  <meta name="theme-color" content="#0B655F">
   <title>HR · EduPay</title>
-  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="icon" href="/favicon.ico" sizes="48x48">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" sizes="any">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="manifest" href="/site.webmanifest">
   <link rel="stylesheet" href="/css/styles.css">
 </head>
 
@@ -19,39 +23,40 @@
       <div class="sidebar-header">
         <h2>Edu<span>Pay</span></h2>
         <p class="user-role">HR</p>
-        <button type="button" class="mobile-close-btn" aria-label="Close navigation">✕</button>
+        <button type="button" class="mobile-close-btn" aria-label="Close navigation" data-icon="close"
+          data-icon-size="17"></button>
       </div>
 
       <nav class="sidebar-nav">
         <div class="nav-section">
           <p class="nav-section-title">Overview</p>
           <button type="button" class="nav-item" data-section="dashboard" data-title="Dashboard">
-            <span class="nav-icon" aria-hidden="true">📊</span> Dashboard
+            <span class="nav-icon" data-icon="dashboard" aria-hidden="true"></span> Dashboard
           </button>
         </div>
 
         <div class="nav-section">
           <p class="nav-section-title">People</p>
           <button type="button" class="nav-item" data-section="teachers" data-title="Teachers">
-            <span class="nav-icon" aria-hidden="true">👩‍🏫</span> Teachers
+            <span class="nav-icon" data-icon="teacher" aria-hidden="true"></span> Teachers
           </button>
           <button type="button" class="nav-item" data-section="salaries" data-title="Salary Structures">
-            <span class="nav-icon" aria-hidden="true">💳</span> Salary Structures
+            <span class="nav-icon" data-icon="creditCard" aria-hidden="true"></span> Salary Structures
           </button>
         </div>
 
         <div class="nav-section">
           <p class="nav-section-title">Approvals</p>
           <button type="button" class="nav-item" data-section="payrollApproval" data-title="Payroll Approval">
-            <span class="nav-icon" aria-hidden="true">✅</span> Payroll Approval
+            <span class="nav-icon" data-icon="checkCircle" aria-hidden="true"></span> Payroll Approval
             <span class="nav-badge" id="navPayrollBadge" hidden>0</span>
           </button>
           <button type="button" class="nav-item" data-section="leave" data-title="Leave Requests">
-            <span class="nav-icon" aria-hidden="true">🗓</span> Leave Requests
+            <span class="nav-icon" data-icon="calendar" aria-hidden="true"></span> Leave Requests
             <span class="nav-badge" id="navLeaveBadge" hidden>0</span>
           </button>
           <button type="button" class="nav-item" data-section="advances" data-title="Advance Requests">
-            <span class="nav-icon" aria-hidden="true">💵</span> Advances
+            <span class="nav-icon" data-icon="banknote" aria-hidden="true"></span> Advances
             <span class="nav-badge" id="navAdvanceBadge" hidden>0</span>
           </button>
         </div>
@@ -59,7 +64,7 @@
         <div class="nav-section">
           <p class="nav-section-title">Account</p>
           <button type="button" class="nav-item" data-section="security" data-title="Security">
-            <span class="nav-icon" aria-hidden="true">🔒</span> Security
+            <span class="nav-icon" data-icon="lock" aria-hidden="true"></span> Security
           </button>
         </div>
       </nav>
@@ -71,7 +76,8 @@
 
     <div class="main-content">
       <header class="topbar">
-        <button type="button" class="menu-toggle" aria-label="Open navigation" aria-expanded="false">☰</button>
+        <button type="button" class="menu-toggle" aria-label="Open navigation" aria-expanded="false"
+          data-icon="menu"></button>
         <h1 id="pageTitle">Dashboard</h1>
         <div id="notificationBell"></div>
         <div class="topbar-user">
@@ -94,8 +100,8 @@
                 <h2>People and approvals</h2>
                 <p>Teachers, salary structures, and the leave, advance and payroll decisions that only HR can make.</p>
                 <div class="hero-chips">
-                <span class="hero-chip"><span aria-hidden="true">✅</span> Approval authority</span>
-                <span class="hero-chip"><span aria-hidden="true">👩‍🏫</span> Teacher records</span>
+                <span class="hero-chip"><span class="chip-icon" data-icon="checkCircle" data-icon-size="15" aria-hidden="true"></span> Approval authority</span>
+                <span class="hero-chip"><span class="chip-icon" data-icon="teacher" data-icon-size="15" aria-hidden="true"></span> Teacher records</span>
                 </div>
               </div>
               <div class="hero-aside">
@@ -105,27 +111,27 @@
             </div>
           </div>
           <div class="stats-grid">
-            <div class="stat-card" data-icon="👩‍🏫">
+            <div class="stat-card" data-icon="teacher">
               <p class="stat-label">Active teachers</p>
               <p class="stat-value" id="statTeachers">—</p>
               <p class="stat-hint" id="statHalted"></p>
             </div>
-            <div class="stat-card accent-warning" data-icon="✅">
+            <div class="stat-card accent-warning" data-icon="checkCircle">
               <p class="stat-label">Payroll to approve</p>
               <p class="stat-value" id="statAwaiting">—</p>
               <p class="stat-hint">Processed, awaiting you</p>
             </div>
-            <div class="stat-card accent-info" data-icon="🗓">
+            <div class="stat-card accent-info" data-icon="calendar">
               <p class="stat-label">Leave requests</p>
               <p class="stat-value" id="statLeave">—</p>
               <p class="stat-hint">Awaiting a decision</p>
             </div>
-            <div class="stat-card accent-info" data-icon="💵">
+            <div class="stat-card accent-info" data-icon="banknote">
               <p class="stat-label">Advance requests</p>
               <p class="stat-value" id="statAdvances">—</p>
               <p class="stat-hint">Awaiting a decision</p>
             </div>
-            <div class="stat-card accent-warning" data-icon="✉">
+            <div class="stat-card accent-warning" data-icon="mail">
               <p class="stat-label">Not yet activated</p>
               <p class="stat-value" id="statPendingActivation">—</p>
               <p class="stat-hint">Teachers who have not set a password</p>
@@ -581,6 +587,7 @@
     </div>
   </div>
 
+  <script src="/js/icons.js"></script>
   <script src="/js/app.js"></script>
   <script src="/js/hr.js"></script>
 </body>

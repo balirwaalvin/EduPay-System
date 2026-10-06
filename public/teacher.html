@@ -6,8 +6,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="robots" content="noindex, nofollow">
   <meta name="color-scheme" content="dark light">
+  <meta name="theme-color" content="#0B655F">
   <title>Teacher Portal · EduPay</title>
-  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="icon" href="/favicon.ico" sizes="48x48">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" sizes="any">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="manifest" href="/site.webmanifest">
   <link rel="stylesheet" href="/css/styles.css">
 </head>
 
@@ -19,44 +23,45 @@
       <div class="sidebar-header">
         <h2>Edu<span>Pay</span></h2>
         <p class="user-role">Teacher Portal</p>
-        <button type="button" class="mobile-close-btn" aria-label="Close navigation">✕</button>
+        <button type="button" class="mobile-close-btn" aria-label="Close navigation" data-icon="close"
+          data-icon-size="17"></button>
       </div>
 
       <nav class="sidebar-nav">
         <div class="nav-section">
           <p class="nav-section-title" id="navOverview">Overview</p>
           <button type="button" class="nav-item" data-section="dashboard" data-title="Dashboard">
-            <span class="nav-icon" aria-hidden="true">📊</span> Dashboard
+            <span class="nav-icon" data-icon="dashboard" aria-hidden="true"></span> Dashboard
           </button>
         </div>
 
         <div class="nav-section">
           <p class="nav-section-title">My pay</p>
           <button type="button" class="nav-item" data-section="payslips" data-title="My Payslips">
-            <span class="nav-icon" aria-hidden="true">🧾</span> Payslips
+            <span class="nav-icon" data-icon="receipt" aria-hidden="true"></span> Payslips
           </button>
           <button type="button" class="nav-item" data-section="history" data-title="Salary History">
-            <span class="nav-icon" aria-hidden="true">📈</span> Salary History
+            <span class="nav-icon" data-icon="trendingUp" aria-hidden="true"></span> Salary History
           </button>
         </div>
 
         <div class="nav-section">
           <p class="nav-section-title">Requests</p>
           <button type="button" class="nav-item" data-section="leave" data-title="Leave">
-            <span class="nav-icon" aria-hidden="true">🗓</span> Leave
+            <span class="nav-icon" data-icon="calendar" aria-hidden="true"></span> Leave
           </button>
           <button type="button" class="nav-item" data-section="advances" data-title="Salary Advances">
-            <span class="nav-icon" aria-hidden="true">💵</span> Advances
+            <span class="nav-icon" data-icon="banknote" aria-hidden="true"></span> Advances
           </button>
         </div>
 
         <div class="nav-section">
           <p class="nav-section-title">Account</p>
           <button type="button" class="nav-item" data-section="profile" data-title="My Profile">
-            <span class="nav-icon" aria-hidden="true">👤</span> Profile
+            <span class="nav-icon" data-icon="user" aria-hidden="true"></span> Profile
           </button>
           <button type="button" class="nav-item" data-section="security" data-title="Security">
-            <span class="nav-icon" aria-hidden="true">🔒</span> Security
+            <span class="nav-icon" data-icon="lock" aria-hidden="true"></span> Security
           </button>
         </div>
       </nav>
@@ -68,7 +73,8 @@
 
     <div class="main-content">
       <header class="topbar">
-        <button type="button" class="menu-toggle" aria-label="Open navigation" aria-expanded="false">☰</button>
+        <button type="button" class="menu-toggle" aria-label="Open navigation" aria-expanded="false"
+          data-icon="menu"></button>
         <h1 id="pageTitle">Dashboard</h1>
         <div id="notificationBell"></div>
         <div class="topbar-user">
@@ -91,8 +97,8 @@
                 <h2>Your pay and requests</h2>
                 <p>Payslips, salary history, and your leave and advance requests — all in one place.</p>
                 <div class="hero-chips">
-                  <span class="hero-chip"><span aria-hidden="true">🧾</span> Payslips as PDF</span>
-                  <span class="hero-chip"><span aria-hidden="true">🗓</span> Leave and advances</span>
+                  <span class="hero-chip"><span class="chip-icon" data-icon="receipt" data-icon-size="15" aria-hidden="true"></span> Payslips as PDF</span>
+                  <span class="hero-chip"><span class="chip-icon" data-icon="calendar" data-icon-size="15" aria-hidden="true"></span> Leave and advances</span>
                 </div>
               </div>
               <div class="hero-aside">
@@ -105,22 +111,22 @@
           <div id="haltBanner" hidden></div>
 
           <div class="stats-grid">
-            <div class="stat-card" data-icon="💰">
+            <div class="stat-card" data-icon="wallet">
               <p class="stat-label">Latest net pay</p>
               <p class="stat-value" id="statLatestNet">—</p>
               <p class="stat-hint" id="statLatestPeriod"></p>
             </div>
-            <div class="stat-card accent-success" data-icon="📈">
+            <div class="stat-card accent-success" data-icon="trendingUp">
               <p class="stat-label">Total received</p>
               <p class="stat-value" id="statTotalEarned">—</p>
               <p class="stat-hint">Across all paid payslips</p>
             </div>
-            <div class="stat-card accent-info" data-icon="🗓">
+            <div class="stat-card accent-info" data-icon="calendar">
               <p class="stat-label">Paid leave left</p>
               <p class="stat-value" id="statLeaveLeft">—</p>
               <p class="stat-hint" id="statLeaveHint"></p>
             </div>
-            <div class="stat-card accent-warning" data-icon="💵">
+            <div class="stat-card accent-warning" data-icon="banknote">
               <p class="stat-label">Advance outstanding</p>
               <p class="stat-value" id="statAdvance">—</p>
               <p class="stat-hint">Still to be recovered</p>
@@ -222,17 +228,17 @@
         <!-- Leave -->
         <section id="leave" class="page-section" hidden>
           <div class="stats-grid">
-            <div class="stat-card accent-info" data-icon="🗓">
+            <div class="stat-card accent-info" data-icon="calendar">
               <p class="stat-label">Entitlement</p>
               <p class="stat-value" id="leaveEntitlement">—</p>
               <p class="stat-hint">Paid days this year</p>
             </div>
-            <div class="stat-card accent-success" data-icon="✅">
+            <div class="stat-card accent-success" data-icon="checkCircle">
               <p class="stat-label">Remaining</p>
               <p class="stat-value" id="leaveRemaining">—</p>
               <p class="stat-hint">Available to request</p>
             </div>
-            <div class="stat-card accent-warning" data-icon="⏳">
+            <div class="stat-card accent-warning" data-icon="clock">
               <p class="stat-label">Awaiting decision</p>
               <p class="stat-value" id="leavePending">—</p>
               <p class="stat-hint">Days with HR</p>
@@ -513,6 +519,7 @@
     </div>
   </div>
 
+  <script src="/js/icons.js"></script>
   <script src="/js/app.js"></script>
   <script src="/js/teacher.js"></script>
 </body>

@@ -379,6 +379,49 @@ The palette extends to generated documents and email: payslips, payroll exports
 and every template use the same jade, so a PDF looks like the system that
 produced it.
 
+**The mark** is `public/logo.svg`: an E built from a stem and three arms, the
+short middle one amber. The stem is load-bearing — three bars alone read as a
+hamburger menu rather than a letter. It is referenced by the sidebar and the
+sign-in panel, and `favicon.svg` is the same shape with heavier strokes so it
+survives 16px.
+
+**Browser and app icons** are a full set, not an SVG alone — Safari, Windows and
+iOS each want something different:
+
+| File | Purpose |
+|---|---|
+| `favicon.svg` | Modern browsers; scales to any tab size |
+| `favicon.ico` | 16/32/48 in one file, for Safari, Windows and bookmarks |
+| `apple-touch-icon.png` | 180×180, iOS home screen — square corners, since iOS applies its own mask |
+| `icon-192.png`, `icon-512.png` | Installed-app icons, referenced by the manifest |
+| `site.webmanifest` | Name, theme colour and the icon set |
+
+`favicon.svg` is **not** `logo.svg` scaled down. It is drawn separately on a 32
+grid with a heavier stroke, a larger mark relative to the tile, and a tighter
+corner radius — at 16px a generous radius eats the corners and the shape turns to
+mush. The tile stays solid jade so it holds against both light and dark tab bars.
+
+Browsers cache favicons aggressively and often ignore a normal reload. A hard
+refresh, or opening the icon URL directly once, is usually needed to see a change.
+
+**Icons** are drawn SVG from `public/js/icons.js`, on a 24 grid at 1.8 stroke,
+inheriting `currentColor`. There are no emoji anywhere in the interface: an emoji
+is a coloured image that cannot take the brand colour, renders differently on
+every operating system, and sits at an inconsistent optical weight beside type.
+
+Markup declares an icon by name and the registry fills it in:
+
+```html
+<span class="nav-icon" data-icon="payroll" aria-hidden="true"></span>
+<div class="stat-card accent-warning" data-icon="clock"> … </div>
+```
+
+`hydrateIcons()` runs on load and can be called again after rendering rows;
+elements are marked `data-icon-done` so it never double-fills. Icon markup only
+ever comes from the registry — a name is never interpolated into the output — so
+nothing user-supplied can reach `innerHTML` through it. Every control carrying an
+icon also carries a label or an `aria-label`, so the icons stay decorative.
+
 **Layout.** The sidebar is a detached rounded card rather than an edge-to-edge
 column, which keeps the page feeling like a set of surfaces instead of panels.
 Each dashboard opens with a gradient hero carrying one headline figure, then

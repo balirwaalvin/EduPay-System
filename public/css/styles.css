@@ -211,6 +211,86 @@ code {
 }
 
 /* --------------------------------------------------------------------------
+   Icons
+
+   Drawn SVG on a 24-grid, inheriting currentColor so an icon always matches the
+   text beside it. They are decorative throughout: every control that carries one
+   also carries a label or an aria-label.
+   -------------------------------------------------------------------------- */
+
+.icon {
+  display: block;
+  flex-shrink: 0;
+  stroke: currentColor;
+  fill: none;
+  vertical-align: middle;
+}
+
+/* The nav glyph sits in a tinted tile. */
+.nav-icon {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border-radius: var(--r-xs);
+  background: var(--ink-100);
+  color: var(--ink-500);
+  transition: var(--t);
+}
+
+.nav-icon .icon {
+  width: 16px;
+  height: 16px;
+}
+
+.nav-item:hover .nav-icon {
+  color: var(--ink-700);
+}
+
+.nav-item.active .nav-icon {
+  background: var(--jade-600);
+  color: #fff;
+  box-shadow: var(--shadow-brand);
+}
+
+.stat-icon .icon {
+  width: 19px;
+  height: 19px;
+}
+
+.chip-icon {
+  display: inline-grid;
+  place-items: center;
+  color: currentColor;
+}
+
+.alert-icon {
+  display: grid;
+  place-items: center;
+  margin-top: 1px;
+}
+
+.toast-icon .icon,
+.bell-item-icon .icon {
+  width: 13px;
+  height: 13px;
+}
+
+.bell-item-icon .icon {
+  width: 15px;
+  height: 15px;
+}
+
+.menu-toggle,
+.mobile-close-btn,
+.reveal-btn,
+.bell-button {
+  display: grid;
+  place-items: center;
+}
+
+/* --------------------------------------------------------------------------
    Utilities. Markup must never carry a style attribute: the content security
    policy sets style-src without 'unsafe-inline'.
    -------------------------------------------------------------------------- */
@@ -324,15 +404,11 @@ body.auth-page {
 }
 
 .auth-brand-badge {
-  display: inline-grid;
-  place-items: center;
+  display: block;
   width: 42px;
   height: 42px;
-  border-radius: var(--r-md);
-  background: rgba(255, 255, 255, .15);
-  border: 1px solid rgba(255, 255, 255, .22);
-  backdrop-filter: blur(8px);
-  font-size: 1.2rem;
+  border-radius: 11.5px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, .22);
 }
 
 .auth-brand-copy h2 {
@@ -370,20 +446,18 @@ body.auth-page {
 }
 
 .auth-brand-points li::before {
-  content: "✓";
+  content: "";
   flex-shrink: 0;
-  display: grid;
-  place-items: center;
   width: 20px;
   height: 20px;
   margin-top: 1px;
   border-radius: 50%;
   background: rgba(251, 191, 36, .17);
   border: 1px solid rgba(251, 191, 36, .42);
-  color: var(--amber-200);
-  font-size: .68rem;
-  font-weight: 800;
-  line-height: 1;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23FDE28A' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m5 12.6 4.6 4.6L19 7.4'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 11px 11px;
 }
 
 /* --- Right: the form --------------------------------------------------- */
@@ -653,20 +727,17 @@ body.auth-page {
   color: var(--ink-900);
 }
 
+/* The real mark, not a borrowed currency glyph. */
 .sidebar-header h2::before {
-  content: "₵";
-  display: grid;
-  place-items: center;
+  content: "";
+  display: block;
   width: 34px;
   height: 34px;
   margin-right: 10px;
   flex-shrink: 0;
-  border-radius: var(--r-sm);
-  background: linear-gradient(140deg, var(--jade-600), var(--jade-800));
-  color: #fff;
-  font-size: 1rem;
-  font-weight: 700;
+  background: url("/logo.svg") center / contain no-repeat;
   box-shadow: var(--shadow-brand);
+  border-radius: 9.5px;
 }
 
 .sidebar-header h2 span {
@@ -773,23 +844,6 @@ body.auth-page {
   height: 18px;
   border-radius: 0 var(--r-pill) var(--r-pill) 0;
   background: var(--brand);
-}
-
-.nav-item .nav-icon {
-  display: grid;
-  place-items: center;
-  width: 26px;
-  height: 26px;
-  flex-shrink: 0;
-  border-radius: var(--r-xs);
-  background: var(--ink-100);
-  font-size: .86rem;
-  transition: var(--t);
-}
-
-.nav-item.active .nav-icon {
-  background: #fff;
-  box-shadow: var(--shadow-xs);
 }
 
 .nav-badge {
@@ -1103,9 +1157,8 @@ body.auth-page {
   transform: translateY(-1px);
 }
 
-/* The icon chip, tinted per accent. */
-.stat-card::before {
-  content: attr(data-icon);
+/* The icon chip, tinted per accent. Filled in by icons.js. */
+.stat-icon {
   display: grid;
   place-items: center;
   width: 38px;
@@ -1114,25 +1167,24 @@ body.auth-page {
   border-radius: var(--r-sm);
   background: var(--brand-soft);
   color: var(--brand-strong);
-  font-size: 1.02rem;
 }
 
-.stat-card.accent-success::before {
+.stat-card.accent-success .stat-icon {
   background: var(--brand-soft);
   color: var(--jade-700);
 }
 
-.stat-card.accent-warning::before {
+.stat-card.accent-warning .stat-icon {
   background: var(--amber-50);
   color: var(--amber-700);
 }
 
-.stat-card.accent-info::before {
+.stat-card.accent-info .stat-icon {
   background: var(--violet-50);
   color: var(--violet-600);
 }
 
-.stat-card.accent-danger::before {
+.stat-card.accent-danger .stat-icon {
   background: var(--rose-50);
   color: var(--rose-600);
 }
@@ -1958,8 +2010,6 @@ td.wrap {
   width: 21px;
   height: 21px;
   border-radius: 50%;
-  font-size: .72rem;
-  font-weight: 800;
   flex-shrink: 0;
   margin-top: 1px;
   background: var(--ink-100);

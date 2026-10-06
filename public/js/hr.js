@@ -352,7 +352,7 @@ function renderAttention(stats) {
 
     if (!items.length) {
         host.innerHTML = html`<div class="alert alert-success">
-      <span class="alert-icon" aria-hidden="true">✓</span>
+      <span class="alert-icon">${raw(icon('check', { size: 16 }))}</span>
       <span>Nothing is waiting on you.</span>
     </div>`;
         return;
@@ -360,7 +360,7 @@ function renderAttention(stats) {
 
     host.innerHTML = items.map(([section, level, message]) => html`
     <div class="alert alert-${raw(level)}">
-      <span class="alert-icon" aria-hidden="true">${level === 'warning' ? '⚠' : 'ℹ'}</span>
+      <span class="alert-icon">${raw(icon(level === 'warning' ? 'alert' : 'info', { size: 16 }))}</span>
       <span>${message}</span>
       <button type="button" class="btn-link" data-goto="${section}">Open</button>
     </div>`).join('');

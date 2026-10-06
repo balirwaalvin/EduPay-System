@@ -6,8 +6,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="robots" content="noindex, nofollow">
   <meta name="color-scheme" content="dark light">
+  <meta name="theme-color" content="#0B655F">
   <title>Accountant · EduPay</title>
-  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="icon" href="/favicon.ico" sizes="48x48">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" sizes="any">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="manifest" href="/site.webmanifest">
   <link rel="stylesheet" href="/css/styles.css">
 </head>
 
@@ -19,41 +23,42 @@
       <div class="sidebar-header">
         <h2>Edu<span>Pay</span></h2>
         <p class="user-role">Accountant</p>
-        <button type="button" class="mobile-close-btn" aria-label="Close navigation">✕</button>
+        <button type="button" class="mobile-close-btn" aria-label="Close navigation" data-icon="close"
+          data-icon-size="17"></button>
       </div>
 
       <nav class="sidebar-nav">
         <div class="nav-section">
           <p class="nav-section-title">Overview</p>
           <button type="button" class="nav-item" data-section="dashboard" data-title="Dashboard">
-            <span class="nav-icon" aria-hidden="true">📊</span> Dashboard
+            <span class="nav-icon" data-icon="dashboard" aria-hidden="true"></span> Dashboard
           </button>
         </div>
 
         <div class="nav-section">
           <p class="nav-section-title">Payroll</p>
           <button type="button" class="nav-item" data-section="payroll" data-title="Payroll Runs">
-            <span class="nav-icon" aria-hidden="true">💰</span> Payroll Runs
+            <span class="nav-icon" data-icon="wallet" aria-hidden="true"></span> Payroll Runs
           </button>
           <button type="button" class="nav-item" data-section="payments" data-title="Record Payments">
-            <span class="nav-icon" aria-hidden="true">✅</span> Record Payments
+            <span class="nav-icon" data-icon="checkCircle" aria-hidden="true"></span> Record Payments
           </button>
           <button type="button" class="nav-item" data-section="teachers" data-title="Teacher Records">
-            <span class="nav-icon" aria-hidden="true">👩‍🏫</span> Teacher Records
+            <span class="nav-icon" data-icon="teacher" aria-hidden="true"></span> Teacher Records
           </button>
         </div>
 
         <div class="nav-section">
           <p class="nav-section-title">Reporting</p>
           <button type="button" class="nav-item" data-section="reports" data-title="Reports and Exports">
-            <span class="nav-icon" aria-hidden="true">📈</span> Reports
+            <span class="nav-icon" data-icon="trendingUp" aria-hidden="true"></span> Reports
           </button>
         </div>
 
         <div class="nav-section">
           <p class="nav-section-title">Account</p>
           <button type="button" class="nav-item" data-section="security" data-title="Security">
-            <span class="nav-icon" aria-hidden="true">🔒</span> Security
+            <span class="nav-icon" data-icon="lock" aria-hidden="true"></span> Security
           </button>
         </div>
       </nav>
@@ -65,7 +70,8 @@
 
     <div class="main-content">
       <header class="topbar">
-        <button type="button" class="menu-toggle" aria-label="Open navigation" aria-expanded="false">☰</button>
+        <button type="button" class="menu-toggle" aria-label="Open navigation" aria-expanded="false"
+          data-icon="menu"></button>
         <h1 id="pageTitle">Dashboard</h1>
         <div id="notificationBell"></div>
         <div class="topbar-user">
@@ -88,8 +94,8 @@
                 <h2>Payroll and payments</h2>
                 <p>Process a run, send it to HR for approval, then record each payment against it.</p>
                 <div class="hero-chips">
-                <span class="hero-chip"><span aria-hidden="true">🧮</span> PAYE and NSSF computed</span>
-                <span class="hero-chip"><span aria-hidden="true">🔒</span> Approval required to pay</span>
+                <span class="hero-chip"><span class="chip-icon" data-icon="calculator" data-icon-size="15" aria-hidden="true"></span> PAYE and NSSF computed</span>
+                <span class="hero-chip"><span class="chip-icon" data-icon="lock" data-icon-size="15" aria-hidden="true"></span> Approval required to pay</span>
                 </div>
               </div>
               <div class="hero-aside">
@@ -99,27 +105,27 @@
             </div>
           </div>
           <div class="stats-grid">
-            <div class="stat-card" data-icon="👩‍🏫">
+            <div class="stat-card" data-icon="teacher">
               <p class="stat-label">Active teachers</p>
               <p class="stat-value" id="statTeachers">—</p>
               <p class="stat-hint" id="statHalted"></p>
             </div>
-            <div class="stat-card accent-warning" data-icon="⏳">
+            <div class="stat-card accent-warning" data-icon="clock">
               <p class="stat-label">Awaiting HR approval</p>
               <p class="stat-value" id="statAwaiting">—</p>
               <p class="stat-hint">Runs you have processed</p>
             </div>
-            <div class="stat-card accent-info" data-icon="🏦">
+            <div class="stat-card accent-info" data-icon="bank">
               <p class="stat-label">Ready to pay</p>
               <p class="stat-value" id="statReadyToPay">—</p>
               <p class="stat-hint">Approved, not yet paid</p>
             </div>
-            <div class="stat-card accent-success" data-icon="💰">
+            <div class="stat-card accent-success" data-icon="wallet">
               <p class="stat-label">Total paid out</p>
               <p class="stat-value" id="statTotalPaid">—</p>
               <p class="stat-hint">Approved and paid runs</p>
             </div>
-            <div class="stat-card accent-warning" data-icon="💵">
+            <div class="stat-card accent-warning" data-icon="banknote">
               <p class="stat-label">Advances outstanding</p>
               <p class="stat-value" id="statPendingAdvance">—</p>
               <p class="stat-hint">Still to be recovered</p>
@@ -443,6 +449,7 @@
     </div>
   </div>
 
+  <script src="/js/icons.js"></script>
   <script src="/js/app.js"></script>
   <script src="/js/accountant.js"></script>
 </body>

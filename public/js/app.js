@@ -223,7 +223,7 @@ function downloadBlob(blob, filename) {
    Toasts
    -------------------------------------------------------------------------- */
 
-const TOAST_ICONS = { success: '✓', error: '✕', warning: '!', info: 'i' };
+const TOAST_ICONS = { success: 'check', error: 'close', warning: 'alert', info: 'info' };
 
 function showToast(message, type = 'success', { duration = 4500 } = {}) {
     let container = document.querySelector('.toast-container');
@@ -238,7 +238,7 @@ function showToast(message, type = 'success', { duration = 4500 } = {}) {
 
     const toast = document.createElement('div');
     toast.className = `toast ${type}`;
-    toast.innerHTML = html`<span class="toast-icon" aria-hidden="true">${TOAST_ICONS[type] || TOAST_ICONS.info}</span>
+    toast.innerHTML = html`<span class="toast-icon">${raw(icon(TOAST_ICONS[type] || TOAST_ICONS.info, { size: 13 }))}</span>
     <span class="toast-message">${message}</span>`;
     container.appendChild(toast);
 
@@ -719,7 +719,8 @@ function showSecret({ title, label, secret, note }) {
 let notificationPollId = null;
 
 const NOTIFICATION_ICONS = {
-    leave: '🗓', advance: '💵', payroll: '📋', payment: '✅', account: '👤', system: 'ℹ'
+    leave: 'calendar', advance: 'banknote', payroll: 'clipboard',
+    payment: 'checkCircle', account: 'user', system: 'info'
 };
 
 function initNotifications({ pollMs = 60000 } = {}) {
@@ -729,7 +730,7 @@ function initNotifications({ pollMs = 60000 } = {}) {
     host.innerHTML = html`
     <button type="button" class="bell-button" id="bellButton"
             aria-label="Notifications" aria-expanded="false" aria-haspopup="true">
-      <span aria-hidden="true">🔔</span>
+      ${raw(icon('bell', { size: 19 }))}
       <span class="bell-count" id="bellCount" hidden>0</span>
     </button>
     <div class="bell-panel" id="bellPanel" role="region" aria-label="Notifications" hidden>
@@ -803,7 +804,7 @@ async function loadNotifications() {
 
         list.innerHTML = notifications.map(item => html`
       <li class="bell-item ${raw(item.isRead ? '' : 'unread')}" data-id="${item.id}">
-        <span class="bell-item-icon" aria-hidden="true">${NOTIFICATION_ICONS[item.category] || 'ℹ'}</span>
+        <span class="bell-item-icon">${raw(icon(NOTIFICATION_ICONS[item.category] || 'info', { size: 15 }))}</span>
         <div class="bell-item-body">
           <p class="bell-item-title">${item.title}</p>
           <p class="bell-item-message">${item.message}</p>
@@ -1151,12 +1152,14 @@ function initPasswordReveals() {
         const input = document.getElementById(button.dataset.reveal);
         if (!input) return;
 
+        button.innerHTML = icon('eye', { size: 17 });
+
         button.addEventListener('click', () => {
             const revealed = input.type === 'text';
             input.type = revealed ? 'password' : 'text';
             button.setAttribute('aria-pressed', String(!revealed));
             button.setAttribute('aria-label', revealed ? 'Show password' : 'Hide password');
-            button.textContent = revealed ? '👁' : '🙈';
+            button.innerHTML = icon(revealed ? 'eye' : 'eyeOff', { size: 17 });
             input.focus();
         });
     });
