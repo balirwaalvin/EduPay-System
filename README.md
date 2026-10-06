@@ -126,6 +126,10 @@ code. Every demo account ends up on one password, printed at the end.
 
 It refuses to run against anything but a local instance.
 
+Every demo account uses the password `Demo-Edupay-2026!x`. The full list, and how
+to get past the two-factor step, is in
+[TECHNICAL_DOCUMENTATION.md § 11](TECHNICAL_DOCUMENTATION.md#11-demo-accounts).
+
 Use this for development and run against Cloud SQL when deploying — the schema
 and code are identical either way.
 
