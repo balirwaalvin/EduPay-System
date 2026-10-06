@@ -478,6 +478,68 @@ action is consequential.
 `background-attachment`, so a clipped column reads as "there is more" rather
 than as a broken layout — and it needs no script.
 
+### Crowded tables: chips and a row menu
+
+The staff list needed **1351px to show 1106px** of content. Three controls sat
+off-screen and "Resend link" was cut in half. Two changes fixed it, and both
+generalise to any table that outgrows its width:
+
+**Collapse facts into chips.** *Two-factor* and *Status* were separate columns,
+each holding one short badge. They became one `.chip-stack` cell carrying
+`Active` · `2FA on` · `No password`. Seven columns became five.
+
+**Collapse actions into a menu.** One action stays visible — the one people
+actually use — and the rest move behind a `⋯` button. The staff row went from
+six buttons (529px) to one button plus a 30px trigger.
+
+The menu is a **`popover`**, which matters for a specific reason: `.table-wrap`
+scrolls horizontally, and *a scroll container clips on both axes*, so an
+absolutely-positioned menu would be cut off at the table's edge. A popover
+renders in the top layer and escapes that entirely. It also brings light
+dismiss and Escape handling with it, for free.
+
+What the popover does **not** bring is position — the top layer has no idea
+where the trigger is, so the browser centres it in the viewport.
+`positionRowMenu()` in `app.js` places it, flipping above the trigger when it
+would run off the bottom (which it will for the last rows of a long table), and
+clamping to the viewport on both axes. One delegated `toggle` listener covers
+every menu on the page, including rows that do not exist yet.
+
+Menus close on resize and on scroll (captured, because the scrolling element is
+often the table wrapper rather than the window) — a menu pinned to a point on
+screen has to go when that point moves.
+
+Two things to keep in mind when applying this elsewhere:
+
+- **Icons inside rendered rows need re-hydrating.** `hydrateIcons()` runs at
+  `DOMContentLoaded`, but rows are built later and again on every search, sort
+  and page turn, so `icons.js` also listens for `table:rendered`. Without it a
+  `data-icon` inside a row stays blank.
+- **Event delegation still works.** A popover is rendered in the top layer but
+  remains a DOM descendant of the row, so a `tbody` click handler still
+  receives its items. No rewiring was needed.
+
+Destructive items sit below a `.row-menu-sep` rule and carry `.is-danger`, so
+Delete is never what a hurried click lands on.
+
+**Applied twice so far.** Admin → Staff accounts (7 columns, 6 buttons) and HR →
+Teachers (7 columns, 3 buttons). The other tables were measured and left alone:
+Salary structures, Payroll approval, Leave and Advances all fit, and their
+Approve/Reject pairs are *primary* actions that belong in the open, not behind a
+menu. The pattern is for crowding, not for uniformity.
+
+HR → Teachers needed two things the staff table did not:
+
+- **`humanise()`** for the salary scale. `Teaching_Assistant` has no break
+  opportunity, so the longest value held the column open at 156px to display
+  "Scale 2". Showing it as "Teaching Assistant" lets it wrap, and the column
+  fell to 95px. The stored value is untouched; `matchesSearch` flattens
+  underscores on both sides so either spelling finds it.
+- **A column drop below 1200px.** Seven columns of real content cannot fit a
+  794px container. Position is the one hidden: it is free text, payroll is
+  calculated from Scale rather than from it, and it is still on the edit form.
+  The contact address truncates with the full value on `title`.
+
 ### Stat tiles are coloured by meaning
 
 A tile's colour states what kind of figure it is, so a dashboard can be scanned
@@ -875,6 +937,11 @@ environment has working email — so a code can actually be delivered.
 2. The six-digit code is emailed to the account
 3. Open the Mailpit inbox at **<http://localhost:8025>** and read it
 4. Enter it on the verification screen
+
+These are the passwords the **seeder** sets. Changing one in the UI — or using
+Staff Accounts → Reset password, which issues a random temporary one shown only
+once — makes that account diverge, and the table above stops being true for it.
+`node scripts/seed-demo.js` puts everything back.
 
 To skip this while developing, turn two-factor off for an account from the
 administrator dashboard (Staff Accounts → Disable 2FA), or:

@@ -2379,6 +2379,40 @@ td.wrap {
   max-width: 300px;
 }
 
+/* For a short classification that would otherwise hold a column open at the
+   width of its longest value. Wraps, but stays narrow. */
+td.wrap-tight {
+  white-space: normal;
+  max-width: 124px;
+}
+
+/* An address is the widest thing in most rows and the least often read in
+   full. It truncates with the whole value on `title`, and it is in the edit
+   form besides, so nothing is actually lost. */
+td.cell-truncate {
+  max-width: 210px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+td.cell-truncate .cell-sub {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Below this the teacher table cannot show seven columns of real content
+   without a horizontal scroll, which is the thing being fixed. Position is the
+   one to drop: it is free text, it is not what payroll is calculated from —
+   that is Scale, which stays — and it is still on the edit form. */
+@media (max-width: 1200px) {
+
+  #teachers th:nth-child(2),
+  #teachers td:nth-child(2) {
+    display: none;
+  }
+}
+
 .cell-primary {
   font-weight: 620;
   color: var(--ink-900);
@@ -2841,6 +2875,171 @@ td.wrap {
 /* ==========================================================================
    Responsive
    ========================================================================== */
+
+/* ==========================================================================
+   Row actions
+
+   A row with six buttons in it is not a table, it is a toolbar with data
+   attached: the staff list needed 1351px to show 1106px of content, so three
+   controls sat off-screen and "Resend link" was sliced in half.
+
+   One action stays visible — the one people actually use — and the rest move
+   into a menu. The menu is a `popover`, which renders in the top layer: that
+   matters because .table-wrap scrolls, and a scroll container clips on both
+   axes, so a plain absolutely-positioned menu would be cut off at the table's
+   edge. The popover also brings light-dismiss and Escape handling with it.
+   ========================================================================== */
+
+.col-actions {
+  width: 1%;
+  white-space: nowrap;
+}
+
+.row-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.row-menu-btn {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex: none;
+  padding: 0;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-xs);
+  color: var(--ink-500);
+  cursor: pointer;
+  transition: var(--t);
+}
+
+.row-menu-btn:hover {
+  background: var(--primary-tint);
+  border-color: var(--primary-line);
+  color: var(--primary-deep);
+}
+
+.row-menu-btn:focus-visible {
+  outline: none;
+  border-color: var(--primary-500);
+  box-shadow: 0 0 0 3.5px var(--primary-100);
+}
+
+/* The open row keeps its button lit, so it is obvious which row the menu
+   belongs to once it is floating in the top layer. */
+.row-menu-btn:has(+ .row-menu:popover-open) {
+  background: var(--primary-tint);
+  border-color: var(--primary-500);
+  color: var(--primary-deep);
+}
+
+.row-menu {
+  position: fixed;
+  margin: 0;
+  inset: auto;
+  min-width: 206px;
+  padding: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-lg);
+  overflow: visible;
+}
+
+.row-menu:popover-open {
+  animation: riseIn 140ms var(--ease-out);
+}
+
+.row-menu::backdrop {
+  background: transparent;
+}
+
+.row-menu button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 11px;
+  background: none;
+  border: 0;
+  border-radius: var(--r-xs);
+  color: var(--text);
+  font-family: inherit;
+  font-size: .865rem;
+  font-weight: 550;
+  text-align: left;
+  cursor: pointer;
+  transition: var(--t-fast);
+}
+
+.row-menu button:hover,
+.row-menu button:focus-visible {
+  outline: none;
+  background: var(--primary-tint);
+  color: var(--primary-800);
+}
+
+.row-menu .icon {
+  flex: none;
+  color: var(--ink-400);
+}
+
+.row-menu button:hover .icon,
+.row-menu button:focus-visible .icon {
+  color: var(--primary);
+}
+
+/* Destructive items sit below a rule, so they are never the thing a hurried
+   click lands on. */
+.row-menu-sep {
+  height: 1px;
+  margin: 6px 4px;
+  background: var(--border);
+}
+
+.row-menu button.is-danger {
+  color: var(--danger);
+}
+
+.row-menu button.is-danger:hover,
+.row-menu button.is-danger:focus-visible {
+  background: var(--rose-50);
+  color: var(--rose-700);
+}
+
+.row-menu button.is-danger .icon {
+  color: var(--rose-500);
+}
+
+.row-menu button.is-accent {
+  color: var(--secondary-700);
+}
+
+.row-menu button.is-accent:hover,
+.row-menu button.is-accent:focus-visible {
+  background: var(--secondary-tint);
+  color: var(--secondary-700);
+}
+
+.row-menu button.is-accent .icon {
+  color: var(--secondary-600);
+}
+
+/* --- Status chips ------------------------------------------------------- */
+
+/* Several small facts about one row — active, two-factor, activation pending —
+   as a wrapping row of chips rather than a column each. Three columns became
+   one, which is most of the width the actions needed. */
+.chip-stack {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+}
 
 /* ==========================================================================
    Motion

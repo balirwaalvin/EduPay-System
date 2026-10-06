@@ -33,46 +33,58 @@ document.addEventListener('DOMContentLoaded', () => {
 function buildTables() {
     staffTable = createTable({
         tbody: 'staffTableBody',
-        columns: 7,
+        columns: 5,
         pageSize: 25,
         searchInput: 'staffSearch',
         countTarget: 'staffCount',
         pagerTarget: 'staffPager',
         searchFields: ['fullName', 'username', 'email', 'role'],
         emptyMessage: 'No accounts match',
+        /* Five columns, not seven. Two-factor and the activation state became
+           chips in Status, and five of the six buttons moved into a menu — the
+           row used to need 245px more width than it had. */
         renderRow: user => html`
       <tr>
         <td>
           <span class="cell-primary">${user.fullName}</span>
-          <span class="cell-sub">Created ${formatDate(user.createdAt)}</span>
+          <span class="cell-sub">${user.username}</span>
         </td>
-        <td>${user.username}</td>
-        <td>${raw(roleBadge(user.role))}</td>
         <td>
           ${user.email || '—'}
           <span class="cell-sub">${user.phone || ''}</span>
         </td>
-        <td>${raw(user.mfaEnabled ? badge('Approved', 'On') : badge('Cancelled', 'Off'))}</td>
+        <td>${raw(roleBadge(user.role))}</td>
         <td>
-          ${raw(user.isActive ? badge('Approved', 'Active') : badge('Cancelled', 'Deactivated'))}
-          ${user.activationPending
-                ? raw('<span class="cell-sub text-warning">Password not set</span>')
-                : raw('')}
+          <div class="chip-stack">
+            ${raw(user.isActive ? badge('Approved', 'Active') : badge('Cancelled', 'Deactivated'))}
+            ${raw(user.mfaEnabled ? badge('Approved', '2FA on') : badge('Muted', '2FA off'))}
+            ${user.activationPending ? raw(badge('Pending', 'No password')) : raw('')}
+          </div>
         </td>
-        <td>
-          <div class="action-btns">
+        <td class="col-actions">
+          <div class="row-actions">
             <button type="button" class="btn btn-sm btn-secondary" data-edit="${user.id}">Edit</button>
-            <button type="button" class="btn btn-sm btn-secondary" data-reset="${user.id}">Reset password</button>
-            ${user.activationPending
-                ? raw(html`<button type="button" class="btn btn-sm btn-accent-soft" data-resend="${user.id}">Resend link</button>`)
+            <button type="button" class="row-menu-btn" popovertarget="staffMenu${user.id}"
+              aria-label="More actions for ${user.fullName}" data-icon="more" data-icon-size="16"></button>
+            <div class="row-menu" popover id="staffMenu${user.id}">
+              <button type="button" data-reset="${user.id}">
+                <span class="icon-slot" data-icon="key" data-icon-size="16"></span> Reset password</button>
+              ${user.activationPending
+                ? raw(html`<button type="button" class="is-accent" data-resend="${user.id}">
+                <span class="icon-slot" data-icon="mail" data-icon-size="16"></span> Resend setup link</button>`)
                 : raw('')}
-            <button type="button" class="btn btn-sm btn-secondary" data-mfa="${user.id}"
-              data-mfa-state="${user.mfaEnabled ? 'on' : 'off'}">
-              ${user.mfaEnabled ? 'Disable 2FA' : 'Enable 2FA'}</button>
-            ${user.isActive
-                ? raw(html`<button type="button" class="btn btn-sm btn-warning" data-deactivate="${user.id}">Deactivate</button>`)
-                : raw(html`<button type="button" class="btn btn-sm btn-success" data-reactivate="${user.id}">Reactivate</button>`)}
-            <button type="button" class="btn btn-sm btn-danger" data-delete="${user.id}">Delete</button>
+              <button type="button" data-mfa="${user.id}" data-mfa-state="${user.mfaEnabled ? 'on' : 'off'}">
+                <span class="icon-slot" data-icon="shield" data-icon-size="16"></span>
+                ${user.mfaEnabled ? 'Disable two-factor' : 'Enable two-factor'}</button>
+              <div class="row-menu-sep"></div>
+              ${user.isActive
+                ? raw(html`<button type="button" data-deactivate="${user.id}">
+                <span class="icon-slot" data-icon="lock" data-icon-size="16"></span> Deactivate</button>`)
+                : raw(html`<button type="button" data-reactivate="${user.id}">
+                <span class="icon-slot" data-icon="check" data-icon-size="16"></span> Reactivate</button>`)}
+              <button type="button" class="is-danger" data-delete="${user.id}">
+                <span class="icon-slot" data-icon="close" data-icon-size="16"></span> Delete account</button>
+            </div>
           </div>
         </td>
       </tr>`

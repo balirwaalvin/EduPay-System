@@ -481,6 +481,67 @@ function initRailTips() {
 }
 
 /* --------------------------------------------------------------------------
+   Row overflow menus
+
+   A `popover` renders in the top layer, which is what lets a row menu escape
+   .table-wrap's clipping — but the top layer has no idea where its button is,
+   so the browser centres it in the viewport. Position is ours to supply.
+
+   One delegated listener covers every menu on the page, including rows that do
+   not exist yet, because tables re-render on every search, sort and page turn.
+   -------------------------------------------------------------------------- */
+
+/** Place an open row menu beside its trigger, flipping when space runs out. */
+function positionRowMenu(menu) {
+    const trigger = document.querySelector(`[popovertarget="${menu.id}"]`);
+    if (!trigger) return;
+
+    const anchor = trigger.getBoundingClientRect();
+    const menuBox = menu.getBoundingClientRect();
+    const margin = 8;
+
+    // Prefer below-left of the trigger; flip above if the menu would run off
+    // the bottom, which it will for the last rows of a long table.
+    const spaceBelow = window.innerHeight - anchor.bottom;
+    const below = spaceBelow >= menuBox.height + margin || spaceBelow > anchor.top;
+
+    let top = below ? anchor.bottom + 6 : anchor.top - menuBox.height - 6;
+    let left = anchor.right - menuBox.width;
+
+    // Keep it on screen on both axes.
+    left = Math.max(margin, Math.min(left, window.innerWidth - menuBox.width - margin));
+    top = Math.max(margin, Math.min(top, window.innerHeight - menuBox.height - margin));
+
+    menu.style.left = `${Math.round(left)}px`;
+    menu.style.top = `${Math.round(top)}px`;
+}
+
+function initRowMenus() {
+    // `toggle` fires after the popover is laid out, so the menu can be measured.
+    document.addEventListener('toggle', (event) => {
+        const menu = event.target;
+        if (!(menu instanceof HTMLElement) || !menu.classList.contains('row-menu')) return;
+        if (event.newState === 'open') positionRowMenu(menu);
+    }, true);
+
+    // A menu is pinned to a point on screen, so it has to go when that point
+    // moves. Scroll is captured because the scrolling element may be the table
+    // wrapper rather than the window.
+    const closeAll = () => document.querySelectorAll('.row-menu:popover-open')
+        .forEach(menu => { try { menu.hidePopover(); } catch { /* already closed */ } });
+
+    window.addEventListener('resize', closeAll, { passive: true });
+    document.addEventListener('scroll', closeAll, { passive: true, capture: true });
+
+    // Choosing an item acts and dismisses; leaving it open over a row that is
+    // about to re-render would strand it.
+    document.addEventListener('click', (event) => {
+        const item = event.target.closest?.('.row-menu button');
+        if (item) item.closest('.row-menu')?.hidePopover();
+    });
+}
+
+/* --------------------------------------------------------------------------
    Motion
 
    Entrances are CSS; what JS supplies is the ordering. Setting `--i` on each
@@ -611,7 +672,7 @@ const BADGE_CLASSES = {
     paid: 'badge-success', rejected: 'badge-danger', superseded: 'badge-muted',
     Pending: 'badge-warning', Approved: 'badge-success', Rejected: 'badge-danger',
     Cancelled: 'badge-muted', Repaying: 'badge-info', Settled: 'badge-success',
-    Paid: 'badge-success'
+    Paid: 'badge-success', Muted: 'badge-muted'
 };
 
 function badge(status, label) {
@@ -653,11 +714,25 @@ function loadingRow(colspan) {
 }
 
 /** Case-insensitive substring match across the chosen fields. */
+/**
+ * Turn a stored enum into something readable: `Head_of_Department` reads as
+ * "Head of Department". The stored value is never changed — only how it is
+ * shown — so sorting, filtering and anything sent back to the API still use
+ * the real one.
+ */
+function humanise(value) {
+    return String(value ?? '').replace(/_/g, ' ').trim();
+}
+
 function matchesSearch(row, term, fields) {
     if (!term) return true;
-    const needle = term.trim().toLowerCase();
+    // Underscores are flattened on both sides, so a value displayed as
+    // "Teaching Assistant" is found by typing it that way as well as by the
+    // stored "Teaching_Assistant".
+    const needle = term.trim().toLowerCase().replace(/_/g, ' ');
     if (!needle) return true;
-    return fields.some(field => String(row[field] ?? '').toLowerCase().includes(needle));
+    return fields.some(field =>
+        String(row[field] ?? '').toLowerCase().replace(/_/g, ' ').includes(needle));
 }
 
 /**
@@ -1271,6 +1346,7 @@ function initDashboard({ role, onSection } = {}) {
     document.querySelector('.mobile-close-btn')?.addEventListener('click', closeSidebar);
     initSidebarCollapse();
     initTopbarScroll();
+    initRowMenus();
 
     if (!document.querySelector('.sidebar-overlay')) {
         const overlay = document.createElement('div');

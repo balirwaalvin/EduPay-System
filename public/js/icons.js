@@ -55,7 +55,11 @@ const ICON_PATHS = {
     // 180deg rotation to mean "expand" without a second icon.
     panelLeft: '<rect x="3.2" y="4.2" width="17.6" height="15.6" rx="2.4"/><path d="M9.4 4.2v15.6"/><path d="m16.8 9.6-2.4 2.4 2.4 2.4"/>',
     chevronLeft: '<path d="m14.4 7.2-4.8 4.8 4.8 4.8"/>',
-    chevronRight: '<path d="m9.6 7.2 4.8 4.8-4.8 4.8"/>'
+    chevronRight: '<path d="m9.6 7.2 4.8 4.8-4.8 4.8"/>',
+
+    // A row's overflow menu. Filled dots rather than stroked rings, which read
+    // as smudges at 16px.
+    more: '<circle cx="5.2" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="18.8" cy="12" r="1.6" fill="currentColor" stroke="none"/>'
 };
 
 // Friendlier aliases, so markup can say what it means.
@@ -112,3 +116,8 @@ function hydrateIcons(root = document) {
 }
 
 document.addEventListener('DOMContentLoaded', () => hydrateIcons());
+
+/* Table rows are rendered long after DOMContentLoaded, and again on every
+   search, sort and page turn, so any [data-icon] inside one needs filling each
+   time. createTable dispatches this after writing the rows. */
+document.addEventListener('table:rendered', (event) => hydrateIcons(event.target));

@@ -43,8 +43,8 @@ function buildTables() {
           <span class="cell-sub">${teacher.employeeId} · ${teacher.username || 'no account'}</span>
         </td>
         <td>${teacher.position || '—'}</td>
-        <td>${teacher.salaryScale}</td>
-        <td>
+        <td class="wrap-tight">${humanise(teacher.salaryScale)}</td>
+        <td class="cell-truncate" title="${teacher.email || ''}">
           ${teacher.email || '—'}
           <span class="cell-sub">${teacher.phone || ''}</span>
         </td>
@@ -55,20 +55,27 @@ function buildTables() {
                 : (teacher.bankAccountNumber || 'Not set')}</span>
         </td>
         <td>
-          ${raw(teacher.isActive === false ? badge('Cancelled', 'Deactivated') : badge('Approved', 'Active'))}
-          ${teacher.activationPending
-                ? raw(html`<span class="cell-sub text-warning">Password not set</span>`)
-                : raw('')}
+          <div class="chip-stack">
+            ${raw(teacher.isActive === false ? badge('Cancelled', 'Deactivated') : badge('Approved', 'Active'))}
+            ${teacher.activationPending ? raw(badge('Pending', 'No password')) : raw('')}
+          </div>
         </td>
-        <td>
-          <div class="action-btns">
+        <td class="col-actions">
+          <div class="row-actions">
             <button type="button" class="btn btn-sm btn-secondary" data-edit="${teacher.id}">Edit</button>
-            ${teacher.activationPending
-                ? raw(html`<button type="button" class="btn btn-sm btn-accent-soft" data-resend="${teacher.id}">Resend link</button>`)
+            <button type="button" class="row-menu-btn" popovertarget="teacherMenu${teacher.id}"
+              aria-label="More actions for ${teacher.fullName}" data-icon="more" data-icon-size="16"></button>
+            <div class="row-menu" popover id="teacherMenu${teacher.id}">
+              ${teacher.activationPending
+                ? raw(html`<button type="button" class="is-accent" data-resend="${teacher.id}">
+                <span class="icon-slot" data-icon="mail" data-icon-size="16"></span> Resend setup link</button>`)
                 : raw('')}
-            ${teacher.isActive === false
-                ? raw(html`<button type="button" class="btn btn-sm btn-success" data-reactivate="${teacher.id}">Reactivate</button>`)
-                : raw(html`<button type="button" class="btn btn-sm btn-warning" data-deactivate="${teacher.id}">Deactivate</button>`)}
+              ${teacher.isActive === false
+                ? raw(html`<button type="button" data-reactivate="${teacher.id}">
+                <span class="icon-slot" data-icon="check" data-icon-size="16"></span> Reactivate</button>`)
+                : raw(html`<button type="button" class="is-danger" data-deactivate="${teacher.id}">
+                <span class="icon-slot" data-icon="lock" data-icon-size="16"></span> Deactivate</button>`)}
+            </div>
           </div>
         </td>
       </tr>`
