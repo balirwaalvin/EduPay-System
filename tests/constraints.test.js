@@ -10,6 +10,9 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
+// Load .env first: this is read before any server module pulls dotenv in.
+require('dotenv').config({ quiet: true });
+
 const TEST_DATABASE_URL = process.env.TEST_DATABASE_URL;
 if (TEST_DATABASE_URL) process.env.DATABASE_URL = TEST_DATABASE_URL;
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'constraint-tests-secret-long-enough-32';

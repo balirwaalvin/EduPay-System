@@ -1,0 +1,37 @@
+# Files excluded from `gcloud run deploy --source .` uploads.
+#
+# gcloud normally derives exclusions from .gitignore, but relying on that is a
+# poor way to protect credentials — this file is explicit so secrets cannot be
+# uploaded into a build by accident.
+
+.gcloudignore
+.git/
+.gitignore
+
+# Credentials and local configuration — never upload
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+cloud-sql-proxy
+cloud-sql-proxy.exe
+
+# Installed on the build machine from package-lock.json
+node_modules/
+
+# Not needed at runtime
+tests/
+scripts/dev-db.sh
+*.md
+!README.md
+coverage/
+.vscode/
+.idea/
+
+# Logs and dumps
+*.log
+*.sql.gz
+*.dump
+dumps/

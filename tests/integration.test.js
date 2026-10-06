@@ -13,6 +13,9 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const http = require('node:http');
 
+// Load .env first: this is read before any server module pulls dotenv in.
+require('dotenv').config({ quiet: true });
+
 const TEST_DATABASE_URL = process.env.TEST_DATABASE_URL;
 
 process.env.NODE_ENV = 'test';

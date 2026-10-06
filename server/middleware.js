@@ -10,6 +10,13 @@ const logger = require('./services/logger');
 const IS_PRODUCTION = process.env.NODE_ENV === 'production';
 const DEV_FALLBACK_SECRET = 'edupay-development-only-secret-do-not-use-in-production';
 
+// A development secret long enough to pass the length check would otherwise sail
+// into production and sign real tokens with a value that is in the repository.
+const DEV_SECRET_MARKERS = [
+    'local', 'development', 'dev-', 'test', 'example', 'sample', 'changeme',
+    'placeholder', 'insecure', 'do-not-use', 'donotuse', 'secret-key', 'your_'
+];
+
 function resolveJwtSecret() {
     const secret = process.env.JWT_SECRET;
 
@@ -21,11 +28,33 @@ function resolveJwtSecret() {
         return DEV_FALLBACK_SECRET;
     }
 
-    if (IS_PRODUCTION && secret.trim().length < 32) {
-        throw new Error('JWT_SECRET must be at least 32 characters in production.');
+    const trimmed = secret.trim();
+
+    if (IS_PRODUCTION) {
+        if (trimmed.length < 32) {
+            throw new Error('JWT_SECRET must be at least 32 characters in production.');
+        }
+
+        // Length alone is not enough: a placeholder can easily be long.
+        const marker = DEV_SECRET_MARKERS.find(m => trimmed.toLowerCase().includes(m));
+        if (marker) {
+            throw new Error(
+                `JWT_SECRET looks like a development placeholder (it contains "${marker}"). `
+                + 'Generate a real one with: openssl rand -base64 48'
+            );
+        }
+
+        if (trimmed === DEV_FALLBACK_SECRET) {
+            throw new Error('JWT_SECRET is the development fallback value. Generate a real one.');
+        }
+
+        // A single repeated character, or very few distinct ones, is not random.
+        if (new Set(trimmed).size < 12) {
+            throw new Error('JWT_SECRET has too little variety to be random. Generate one with: openssl rand -base64 48');
+        }
     }
 
-    return secret.trim();
+    return trimmed;
 }
 
 const JWT_SECRET = resolveJwtSecret();

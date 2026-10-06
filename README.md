@@ -63,18 +63,56 @@ Zero npm vulnerabilities as of the last check.
   Cloud SQL and standard Postgres distributions; the migration enables it.
 - An SMTP account (optional but strongly recommended — see
   [Without email](#without-email))
+- To connect from outside Google Cloud: the
+  [Cloud SQL Auth Proxy](https://cloud.google.com/sql/docs/postgres/sql-proxy) and
+  an authenticated `gcloud` (`gcloud auth application-default login`)
+
+> **Firebase Data Connect.** Data Connect is Firebase's PostgreSQL product and
+> runs on Cloud SQL underneath, so this schema is compatible with the instance it
+> provisions. But Data Connect manages schema from its own GraphQL SDL, and that
+> SDL cannot express the constraints this system relies on — the leave-overlap
+> exclusion constraint, partial unique indexes, cross-column checks, generated
+> columns or triggers. Point EduPay at a Cloud SQL instance directly and leave the
+> Data Connect layer out of the path, or use a plain Cloud SQL instance.
 
 ---
 
 ## Setup
 
-### 1. Install
+### Quickest path: everything local
+
+No cloud account, no credentials, no proxy. Needs `podman` or `docker`:
+
+```bash
+./scripts/dev-db.sh up
+```
+
+That starts PostgreSQL 16 in a container, creates a separate test database,
+applies the migrations, seeds the first administrator and prints the three lines
+to put in `.env`. Then:
+
+```bash
+npm start      # http://localhost:3000
+npm test       # 143 tests, including the database suites
+```
+
+Other commands: `stop` (keeps data), `down` (deletes it), `reset` (rebuild from
+scratch), `psql` (a SQL prompt), `url` (print the connection string).
+
+Use this for development and run against Cloud SQL when deploying — the schema
+and code are identical either way.
+
+---
+
+### Against Cloud SQL
+
+#### 1. Install
 
 ```bash
 npm install
 ```
 
-### 2. Configure the connection
+#### 2. Configure the connection
 
 ```bash
 cp .env.example .env
@@ -102,7 +140,20 @@ production without it.
 openssl rand -base64 48
 ```
 
-### 3. Create the schema and seed
+#### 3. Create the schema and seed
+
+Against Cloud SQL, the helper script handles the proxy and both steps:
+
+```bash
+./scripts/setup-cloudsql.sh
+```
+
+It reads `INSTANCE_CONNECTION_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` and
+`JWT_SECRET` from `.env`, starts the Auth Proxy if nothing is already listening,
+applies the migrations, seeds, and reports the final migration status. It is safe
+to re-run.
+
+Or do it by hand, with the proxy already running:
 
 ```bash
 npm run db:setup      # migrate, then seed
