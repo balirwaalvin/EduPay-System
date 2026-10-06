@@ -115,7 +115,7 @@ function buildTables() {
         <td>
           ${teacher.salaryScale}
           ${teacher.scaleMissing
-                ? raw('<span class="cell-sub" style="color:var(--danger)">Scale missing</span>')
+                ? raw('<span class="cell-sub text-danger">Scale missing</span>')
                 : raw('')}
         </td>
         <td class="numeric">${formatCurrency(teacher.basicSalary)}</td>
@@ -329,7 +329,7 @@ async function processPayroll(event) {
           <strong>${result.message}</strong><br>
           ${result.employeeCount} employee(s) · Gross ${formatCurrency(result.totalGross)} ·
           Net ${formatCurrency(result.totalNet)} · Employer cost ${formatCurrency(result.totalEmployerCost)}
-          ${notes ? raw(`<ul style="margin:8px 0 0;padding-left:18px">${notes}</ul>`) : raw('')}
+          ${notes ? raw(`<ul class="note-list">${notes}</ul>`) : raw('')}
         </span>
       </div>`;
 

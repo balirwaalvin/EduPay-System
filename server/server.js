@@ -17,7 +17,15 @@ const teacherRoutes = require('./routes/teacher');
 const notificationRoutes = require('./routes/notifications');
 
 const app = express();
-const PORT = Number(process.env.PORT || 3000);
+
+// Port and bind address both come from the environment. 3100 rather than the
+// conventional 3000, which is commonly already taken by another project.
+const PORT = Number(process.env.PORT || 3100);
+
+// Bind address. The default accepts connections on every interface, which is
+// what a container needs. Set HOST=127.0.0.1 to accept local connections only.
+const HOST = process.env.HOST || '0.0.0.0';
+
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 
 app.set('trust proxy', Number(process.env.TRUST_PROXY_HOPS || 1));
@@ -30,35 +38,70 @@ app.disable('x-powered-by');
 // user-supplied text; it is the backstop behind output escaping. All page
 // scripts live in external files so that `script-src` needs no inline allowance.
 // ---------------------------------------------------------------------------
-// Firebase Analytics on the sign-in page is the only external dependency left;
-// all data access is server-side against PostgreSQL.
-const ANALYTICS_ORIGINS = [
-    'https://www.googleapis.com',
-    'https://firebaseinstallations.googleapis.com',
-    'https://www.google-analytics.com',
-    'https://region1.google-analytics.com'
-];
+// ---------------------------------------------------------------------------
+// Content security policy.
+//
+// Two policies, not one. Firebase Analytics needs to load a third-party script
+// from googletagmanager.com, and allowing that origin inside the dashboards —
+// which display salaries and bank details and hold the access token — would mean
+// a compromise of that origin could inject script into them.
+//
+// So the sign-in page, which holds no data, gets the wider policy that lets
+// Analytics work; every authenticated page gets the strict one. Analytics only
+// ever runs on the sign-in page, so nothing is lost.
+// ---------------------------------------------------------------------------
+const STRICT_CSP = {
+    defaultSrc: ["'self'"],
+    baseUri: ["'self'"],
+    scriptSrc: ["'self'"],
+    styleSrc: ["'self'"],
+    imgSrc: ["'self'", 'data:'],
+    fontSrc: ["'self'"],
+    connectSrc: ["'self'"],
+    formAction: ["'self'"],
+    frameAncestors: ["'none'"],
+    objectSrc: ["'none'"]
+};
 
-app.use(helmet({
-    contentSecurityPolicy: {
-        directives: {
-            defaultSrc: ["'self'"],
-            baseUri: ["'self'"],
-            scriptSrc: ["'self'", 'https://www.gstatic.com'],
-            styleSrc: ["'self'"],
-            imgSrc: ["'self'", 'data:'],
-            fontSrc: ["'self'"],
-            connectSrc: ["'self'", ...ANALYTICS_ORIGINS],
-            formAction: ["'self'"],
-            frameAncestors: ["'none'"],
-            objectSrc: ["'none'"],
-            ...(IS_PRODUCTION ? { upgradeInsecureRequests: [] } : {})
-        }
-    },
+// Origins Firebase Analytics needs: the SDK from gstatic, gtag from
+// googletagmanager, remote config from firebase.googleapis.com, installation
+// ids from firebaseinstallations, and measurement beacons to google-analytics.
+const ANALYTICS_CSP = {
+    ...STRICT_CSP,
+    scriptSrc: ["'self'", 'https://www.gstatic.com', 'https://www.googletagmanager.com'],
+    connectSrc: [
+        "'self'",
+        'https://firebase.googleapis.com',
+        'https://firebaseinstallations.googleapis.com',
+        'https://www.googleapis.com',
+        'https://www.google-analytics.com',
+        'https://region1.google-analytics.com',
+        // GA4 falls back to this origin for its collect beacon.
+        'https://www.google.com'
+    ],
+    imgSrc: ["'self'", 'data:', 'https://www.google-analytics.com']
+};
+
+const withUpgrade = (directives) => ({
+    ...directives,
+    ...(IS_PRODUCTION ? { upgradeInsecureRequests: [] } : {})
+});
+
+const commonHelmet = {
     crossOriginEmbedderPolicy: false,
     referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
     hsts: IS_PRODUCTION ? { maxAge: 31536000, includeSubDomains: true, preload: false } : false
-}));
+};
+
+const strictHelmet = helmet({ ...commonHelmet, contentSecurityPolicy: { directives: withUpgrade(STRICT_CSP) } });
+const analyticsHelmet = helmet({ ...commonHelmet, contentSecurityPolicy: { directives: withUpgrade(ANALYTICS_CSP) } });
+
+// Only the sign-in page and the scripts it needs get the wider policy.
+const ANALYTICS_PATHS = new Set(['/', '/index.html', '/js/firebase-client.js', '/js/analytics-init.js']);
+
+app.use((req, res, next) => {
+    (ANALYTICS_PATHS.has(req.path) ? analyticsHelmet : strictHelmet)(req, res, next);
+});
 
 // Restrict cross-origin API access to configured origins rather than allowing all.
 const allowedOrigins = (process.env.ALLOWED_ORIGINS || '')
@@ -212,8 +255,9 @@ async function start() {
         );
     }
 
-    const server = app.listen(PORT, () => {
+    const server = app.listen(PORT, HOST, () => {
         logger.info('EduPay started', {
+            host: HOST,
             port: PORT,
             env: process.env.NODE_ENV || 'development',
             database: dbInfo.database
@@ -223,6 +267,27 @@ async function start() {
             console.log(`  http://localhost:${PORT}`);
             console.log(`  Database: ${dbInfo.database} (${dbInfo.version})\n`);
         }
+    });
+
+    // A port clash is a common local annoyance; say so plainly rather than
+    // printing a stack trace.
+    server.on('error', (err) => {
+        if (err.code === 'EADDRINUSE') {
+            logger.error('Port already in use', { host: HOST, port: PORT });
+            console.error(
+                `\n  Port ${PORT} is already in use by another process.\n\n`
+                + '  Either stop whatever is using it, or choose a different port:\n'
+                + `    PORT=4100 npm start\n`
+                + '  or set PORT in your .env file.\n'
+            );
+            process.exit(1);
+        }
+        if (err.code === 'EACCES') {
+            logger.error('Permission denied binding the port', { host: HOST, port: PORT });
+            console.error(`\n  Permission denied binding port ${PORT}. Ports below 1024 need elevated rights.\n`);
+            process.exit(1);
+        }
+        throw err;
     });
 
     const shutdown = (signal) => {

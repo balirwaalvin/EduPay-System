@@ -931,6 +931,13 @@ function openForcedPasswordChange() {
    User display and sign-out
    -------------------------------------------------------------------------- */
 
+const ROLE_LABELS = {
+    admin: 'Administrator',
+    hr: 'HR',
+    accountant: 'Accountant',
+    teacher: 'Teacher'
+};
+
 function initials(name) {
     return String(name || '')
         .trim()
@@ -947,8 +954,9 @@ function initUserDisplay() {
 
     document.querySelectorAll('.user-full-name').forEach(el => { el.textContent = user.fullName || user.username; });
     document.querySelectorAll('.user-avatar').forEach(el => { el.textContent = initials(user.fullName || user.username); });
+    // Spelled out rather than capitalised, so "hr" does not render as "Hr".
     document.querySelectorAll('.user-role-display').forEach(el => {
-        el.textContent = String(user.role || '').replace(/^./, c => c.toUpperCase());
+        el.textContent = ROLE_LABELS[user.role] || user.role || '';
     });
 
     if (user.mustChangePassword) openForcedPasswordChange();

@@ -354,6 +354,29 @@ administrators for every other operation.
 
 No framework and no build step. Three ideas carry most of the weight.
 
+### The `hidden` attribute
+
+`[hidden] { display: none !important; }` is set deliberately. The attribute is
+implemented by the user-agent stylesheet as `display: none`, which **any** author
+`display` rule overrides — so an element carrying both `hidden` and, say,
+`.bell-panel { display: flex }` stays on screen. That had the notification panel
+permanently open and covering the page (blocking the buttons underneath), and
+showed the two-factor form before anyone had signed in. Any new component with a
+`display` rule and a `hidden` state depends on this.
+
+### Content security policy, in two flavours
+
+The sign-in page is served a wider policy than the authenticated pages. Firebase
+Analytics needs to load script from `googletagmanager.com`, and permitting that
+origin inside the dashboards — which show salaries and bank details and hold the
+access token — would mean a compromise there could inject script into them. The
+sign-in page holds no data, so it carries the risk instead. Analytics is off by
+default; `data-analytics="on"` in `index.html` enables it.
+
+No page needs `'unsafe-inline'`: every script is an external file and no markup
+carries a `style` attribute. Utility classes in the stylesheet exist for that
+reason.
+
 ### Escaping by default
 
 ```js

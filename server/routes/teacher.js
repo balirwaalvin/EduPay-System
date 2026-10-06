@@ -491,7 +491,9 @@ router.get('/stats', asyncHandler(async (req, res) => {
     );
 
     const latest = await db.queryOne(
-        `SELECT net_salary, month, year FROM payroll_items
+        `SELECT net_salary, month, year,
+                to_char(make_date(year, month, 1), 'FMMonth YYYY') AS period_label
+           FROM payroll_items
           WHERE teacher_id = $1 AND NOT superseded
           ORDER BY year DESC, month DESC LIMIT 1`,
         [teacher.id]
@@ -512,7 +514,7 @@ router.get('/stats', asyncHandler(async (req, res) => {
         payrollHalted: Boolean(teacher.payrollHalted),
         payrollHaltReason: teacher.payrollHaltReason || null,
         latestNetSalary: latest ? round2(latest.netSalary) : 0,
-        latestPeriod: latest ? `${latest.month}/${latest.year}` : null,
+        latestPeriod: latest ? latest.periodLabel : null,
         totalEarnedToDate: round2(stats.totalEarned),
         payslipCount: Number(stats.payslipCount),
         pendingLeaveCount: Number(stats.pendingLeaveCount),

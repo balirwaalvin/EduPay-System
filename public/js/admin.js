@@ -56,7 +56,7 @@ function buildTables() {
         <td>
           ${raw(user.isActive ? badge('Approved', 'Active') : badge('Cancelled', 'Deactivated'))}
           ${user.activationPending
-                ? raw('<span class="cell-sub" style="color:var(--warning)">Password not set</span>')
+                ? raw('<span class="cell-sub text-warning">Password not set</span>')
                 : raw('')}
         </td>
         <td>
@@ -536,7 +536,7 @@ async function loadAudit({ reset }) {
         body.innerHTML = auditRows.length
             ? auditRows.map(entry => html`
         <tr>
-          <td style="white-space:nowrap">${formatDateTime(entry.createdAt)}</td>
+          <td class="nowrap">${formatDateTime(entry.createdAt)}</td>
           <td>
             <span class="cell-primary">${entry.username || 'system'}</span>
             ${entry.role ? raw(html`<span class="cell-sub">${entry.role}</span>`) : raw('')}

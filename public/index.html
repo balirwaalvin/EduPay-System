@@ -1,5 +1,12 @@
 <!DOCTYPE html>
-<html lang="en" data-analytics="on">
+<!--
+  Firebase Analytics is off by default. Switch data-analytics to "on" to enable
+  it; the server already serves this page a wider content security policy that
+  permits the Google origins it needs. It is off because this is an internal
+  payroll system where pageview tracking has little value, and enabling it means
+  trusting googletagmanager.com to serve script into the sign-in page.
+-->
+<html lang="en" data-analytics="off">
 
 <head>
   <meta charset="UTF-8">
@@ -74,10 +81,7 @@
 
   <script src="/js/app.js"></script>
   <script src="/js/login.js"></script>
-  <script type="module">
-    import { initFirebaseAnalytics } from '/js/firebase-client.js';
-    initFirebaseAnalytics();
-  </script>
+  <script type="module" src="/js/analytics-init.js"></script>
 </body>
 
 </html>

@@ -158,6 +158,17 @@ code {
   border-radius: 3px;
 }
 
+/*
+ * The HTML `hidden` attribute is implemented by the user-agent stylesheet as
+ * `display: none`, which ANY author `display` rule overrides — so an element
+ * with both `hidden` and, say, `.bell-panel { display: flex }` stays visible.
+ * This made the notification panel open on load and cover the page, and showed
+ * the two-factor form before anyone had signed in. Make `hidden` authoritative.
+ */
+[hidden] {
+  display: none !important;
+}
+
 /* Screen-reader-only text. */
 .sr-only {
   position: absolute;
@@ -667,10 +678,6 @@ body.auth-page {
 .content-area {
   padding: 24px;
   flex: 1;
-}
-
-.page-section[hidden] {
-  display: none;
 }
 
 .sidebar-overlay {
@@ -1203,6 +1210,37 @@ td.wrap {
 .pager-status {
   font-size: .83rem;
   color: var(--text-light);
+}
+
+/* --------------------------------------------------------------------------
+   Utilities
+   Markup must never carry a style attribute: the content security policy sets
+   style-src without 'unsafe-inline', so inline styles are blocked.
+   -------------------------------------------------------------------------- */
+
+.text-danger {
+  color: var(--danger);
+}
+
+.text-warning {
+  color: var(--warning);
+}
+
+.text-muted {
+  color: var(--text-light);
+}
+
+.nowrap {
+  white-space: nowrap;
+}
+
+.inline-field {
+  margin: 0;
+}
+
+.note-list {
+  margin: 8px 0 0;
+  padding-left: 18px;
 }
 
 /* ==========================================================================

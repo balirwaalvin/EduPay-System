@@ -57,7 +57,7 @@ function buildTables() {
         <td>
           ${raw(teacher.isActive === false ? badge('Cancelled', 'Deactivated') : badge('Approved', 'Active'))}
           ${teacher.activationPending
-                ? raw(html`<span class="cell-sub" style="color:var(--warning)">Password not set</span>`)
+                ? raw(html`<span class="cell-sub text-warning">Password not set</span>`)
                 : raw('')}
         </td>
         <td>
@@ -154,7 +154,7 @@ function buildTables() {
         </td>
         <td>
           ${request.leaveType}
-          ${request.isUnpaid ? raw('<span class="cell-sub" style="color:var(--warning)">Unpaid</span>') : raw('')}
+          ${request.isUnpaid ? raw('<span class="cell-sub text-warning">Unpaid</span>') : raw('')}
         </td>
         <td>${formatDate(request.startDate)} – ${formatDate(request.endDate)}</td>
         <td class="numeric">${request.days}</td>

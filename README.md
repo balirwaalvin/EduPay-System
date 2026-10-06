@@ -19,6 +19,7 @@ are enforced by database constraints, not just application code.
 - [Roles and permissions](#roles-and-permissions)
 - [Payroll calculation](#payroll-calculation)
 - [Security model](#security-model)
+- [Environments and data](#environments-and-data)
 - [Deployment](#deployment)
 - [Tests](#tests)
 - [API reference](#api-reference)
@@ -92,12 +93,38 @@ applies the migrations, seeds the first administrator and prints the three lines
 to put in `.env`. Then:
 
 ```bash
-npm start      # http://localhost:3000
+npm start      # http://localhost:3100
 npm test       # 143 tests, including the database suites
 ```
 
+That also starts **Mailpit**, an SMTP sink with a web inbox at
+<http://localhost:8025>, so the emailed password-setup links, password resets and
+two-factor codes all work without a real mail account.
+
 Other commands: `stop` (keeps data), `down` (deletes it), `reset` (rebuild from
-scratch), `psql` (a SQL prompt), `url` (print the connection string).
+scratch), `psql` (a SQL prompt), `url` (connection string), `mail` (inbox URL).
+
+### Demo data
+
+To fill the app with a realistic school:
+
+```bash
+npm start                     # in one terminal
+node scripts/seed-demo.js     # in another
+```
+
+It drives the HTTP API rather than writing to the database, so everything passes
+through the real validation, fires the real notifications and is subject to the
+real constraints — which makes it a workflow smoke test as well as a data
+generator. It creates HR and accountant accounts, ten teachers across several
+scales, leave and advance requests in various states, a paused teacher, and a
+processed-then-approved payroll run with some payments recorded.
+
+Accounts activate the way a real one would: it reads the emailed setup link out
+of Mailpit and uses it, then completes the two-factor challenge from the emailed
+code. Every demo account ends up on one password, printed at the end.
+
+It refuses to run against anything but a local instance.
 
 Use this for development and run against Cloud SQL when deploying — the schema
 and code are identical either way.
@@ -191,7 +218,15 @@ npm start          # production mode
 npm run dev        # with --watch, restarts on change
 ```
 
-Then open <http://localhost:3000>.
+Then open <http://localhost:3100>.
+
+The port is **3100** rather than the conventional 3000, which is commonly already
+taken. Change `PORT` in `.env` and the app, the demo seeder and the dev-services
+script all follow; nothing hardcodes it. `HOST` controls the bind address —
+`0.0.0.0` by default, or `127.0.0.1` to accept only local connections.
+
+If the port is taken, the server says so plainly and exits rather than printing a
+stack trace.
 
 Health endpoints:
 
@@ -344,6 +379,102 @@ The administrator dashboard shows this under **Dashboard → System health**.
 
 ---
 
+## Environments and data
+
+**The database does not travel with the app.** Deploying ships code; each
+environment keeps its own data.
+
+```
+   your laptop                              Cloud Run
+┌──────────────────────┐                ┌──────────────────────┐
+│  EduPay (npm start)  │                │  EduPay (deployed)   │
+└──────────┬───────────┘                └──────────┬───────────┘
+           │                                       │ Unix socket
+           ▼                                       ▼
+┌──────────────────────┐                ┌──────────────────────┐
+│ container Postgres   │                │  Cloud SQL instance  │
+│ edupay_dev           │                │  edupay              │
+│ throwaway test data  │                │  real data, backed up│
+└──────────────────────┘                └──────────────────────┘
+
+        git / deploy carries:  code  +  server/migrations/*.sql
+        it does NOT carry:     any data
+```
+
+What this means in practice:
+
+| Thing | Travels on deploy? | How it gets to production |
+|---|---|---|
+| Application code | yes | `gcloud run deploy` |
+| **Schema definition** | yes, as `server/migrations/*.sql` | `npm run db:migrate` against Cloud SQL |
+| Salary scales, settings | no | `npm run db:seed`, once |
+| First administrator | no | `npm run db:seed`, once |
+| Teachers, payroll, leave | no | entered through the app, or imported |
+| Your local test data | no | deliberately — never load dev data into production |
+
+So the schema is code and is version-controlled; the data is not. That is the
+whole point of keeping migrations in the repository: running them against any
+empty database produces an identical structure.
+
+### Two databases, on purpose
+
+Keeping them separate is a feature, not an inconvenience:
+
+- you can reset, break and re-seed the local one freely — `./scripts/dev-db.sh reset`
+- the test suites truncate every table, which must never happen to real payroll data
+- a bad migration is caught locally before it reaches live records
+
+### The one-time production setup
+
+Done once per environment, not on every deploy:
+
+```bash
+# 1. Create the instance and database (or use an existing one)
+gcloud sql instances create edupay-db \
+  --database-version=POSTGRES_16 --tier=db-g1-small --region=europe-west1
+gcloud sql databases create edupay --instance=edupay-db
+gcloud sql users create edupay --instance=edupay-db --password='…'
+
+# 2. Create the schema and seed — through the Auth Proxy
+./scripts/setup-cloudsql.sh        # prints the admin password once
+
+# 3. Deploy the app
+gcloud run deploy edupay --source . …
+```
+
+### Every later deploy
+
+```bash
+npm run db:migrate    # only if you added a migration; no-op otherwise
+gcloud run deploy edupay --source . …
+```
+
+Run migrations **before** the deploy, and as a separate step — several Cloud Run
+instances starting at once would otherwise race to apply the same migration.
+`npm run db:migrate:status` shows whether anything is pending.
+
+### Moving data between environments
+
+Rarely wanted, but if you need a copy of production to debug against:
+
+```bash
+# Export from Cloud SQL to a bucket, then import locally
+gcloud sql export sql edupay-db gs://your-bucket/edupay-$(date +%F).sql.gz --database=edupay
+
+# Or, with the Auth Proxy running, straight into the local container
+pg_dump "postgresql://edupay:…@127.0.0.1:5432/edupay" \
+  | podman exec -i edupay-dev-db psql -U edupay -d edupay_dev
+```
+
+Going the other way — local into production — is almost always a mistake. Seed
+production and enter real data through the app.
+
+> Production payroll data includes names, bank account numbers and salaries.
+> Treat any copy of it as the same sensitive record as the original: keep it off
+> shared machines, and delete it when you are done debugging.
+
+---
+
 ## Deployment
 
 ### Cloud Run (recommended)
@@ -377,7 +508,11 @@ relatively few connections.
 ### Checklist before going live
 
 - [ ] `NODE_ENV=production`
-- [ ] `JWT_SECRET` set, 32+ characters (startup refuses otherwise)
+- [ ] `JWT_SECRET` is a real random value — `openssl rand -base64 48`. Startup
+      refuses a short one, the development fallback, anything containing
+      `local`/`development`/`test`/`changeme`, or a value with too little variety
+- [ ] Secrets passed as `--set-secrets`, never baked into the image. `.gcloudignore`
+      keeps `.env` out of the upload
 - [ ] `BASE_URL` set, so email links are correct
 - [ ] `ALLOWED_ORIGINS` set if the front end is on another origin
 - [ ] Migrations applied — `npm run db:migrate:status` shows 0 pending
