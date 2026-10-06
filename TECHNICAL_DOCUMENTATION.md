@@ -478,6 +478,103 @@ action is consequential.
 `background-attachment`, so a clipped column reads as "there is more" rather
 than as a broken layout — and it needs no script.
 
+### Scrollbars, and why the two engines are handled separately
+
+The scrollbar is chrome people look at all day, so it carries the brand: a jade
+pill floating in a transparent track, achieved with `border: 3px solid
+transparent` plus `background-clip: padding-box`, which insets the thumb instead
+of letting it sit flush against the edge.
+
+There are two mechanisms for this and **they are mutually exclusive**:
+
+| | Mechanism | Engines |
+|---|---|---|
+| `::-webkit-scrollbar-*` | Full control: size, inset, radius, hover colour | Chrome, Edge, Safari |
+| `scrollbar-width` / `scrollbar-color` | Colour and a coarse width only | Firefox (and Chrome 121+) |
+
+Blink ignores **every** `::-webkit-scrollbar` rule on any element that also sets
+`scrollbar-width` or `scrollbar-color`. So the obvious thing — declaring both
+globally and calling it progressive enhancement — silently throws the designed
+scrollbar away in Chrome and leaves the plain one. The standard properties are
+therefore gated:
+
+```css
+@supports (scrollbar-width: thin) and (not selector(::-webkit-scrollbar)) { … }
+```
+
+which is true only in Firefox. **Do not move those declarations out of that
+block,** and do not add `scrollbar-width`/`scrollbar-color` to a component rule
+outside it — either change disables the WebKit styling for that element.
+
+Three treatments: the page scrollbar sits on the canvas so it is a step darker;
+the sidebar's stays invisible until the sidebar is hovered, because a scrollbar
+parked beside navigation is noise; a table's horizontal bar keeps a visible
+track, because there it is also the signal that more columns exist.
+
+### Collapsing the sidebar
+
+The sidebar has two behaviours that must never overlap:
+
+- **Above 860px** it is a permanent column. `body.nav-collapsed` narrows it to a
+  76px icon rail, and the preference persists in `localStorage`
+  (`edupay.navCollapsed`).
+- **At 860px and below** it is a drawer that slides over the content, driven by
+  `.open`.
+
+Collapsing is a **single token change** — `body.nav-collapsed` sets
+`--sidebar-width: 76px`, and because every width, margin and offset already
+derives from that token, nothing else needs a parallel layout. The rest of the
+rules only hide labels.
+
+Two things that are easy to get wrong, both of which this code has hit:
+
+- The rail rules are wrapped in `@media (min-width: 861px)`. Without that guard
+  they apply to the mobile drawer too, turning it into icons with no way to read
+  them.
+- **The collapse control must stay visible while collapsed.** Hiding it in the
+  rail is a one-way door: collapse once and the only way back is clearing
+  storage. In the rail the header becomes a column and the control moves beneath
+  the mark.
+
+Labels are hidden with `font-size: 0` rather than `display: none`, so the text
+can transition to nothing as the rail narrows, and so the logo's `::before` —
+which has its own fixed size — is untouched.
+
+Because `.sidebar-nav` scrolls, and a scroll container clips on **both** axes, a
+tooltip drawn as a pseudo-element on a nav item would be cut off at the rail's
+edge. The rail tooltip is therefore one shared `.rail-tip` node on `<body>`,
+positioned from script. A pending count moves into the tooltip, since the badge
+is only a dot at 76px.
+
+### Motion
+
+Two rules govern all of it.
+
+**Motion explains, it does not decorate.** A section's blocks rise in the order
+you read them; a table's rows arrive in sequence; the one looping animation in
+the system is the pending-badge pulse, which is tracking work that genuinely
+still needs a decision. Where motion had nothing to say, there is none — which
+is also why `loadingRow()` renders skeleton rows at the size of real ones
+rather than a spinner, so the table does not jump when the data lands.
+
+**It happens once and gets out of the way.** Entrances are 280–380ms and do not
+repeat. Nothing animates layout — every keyframe touches only `transform`,
+`opacity`, `box-shadow` or `background`, so none of it triggers reflow.
+
+Ordering comes from JS, shape from CSS: `staggerSection()` and `staggerRows()`
+set `--i` on each element, and one rule turns it into a delay:
+
+```css
+animation-delay: calc(var(--i, 0) * 45ms);
+```
+
+Row stagger is capped at 12 (`STAGGER_ROW_CAP`); past that the stagger stops
+being life and becomes a wait.
+
+`prefers-reduced-motion: reduce` flattens every animation and transition to
+~0ms, and the JS checks it too via `prefersReducedMotion()` — the CSS media
+query cannot reach the `--i` values we set from script.
+
 ### The `hidden` attribute
 
 `[hidden] { display: none !important; }` is set deliberately. The attribute is
@@ -499,7 +596,15 @@ default; `data-analytics="on"` in `index.html` enables it.
 
 No page needs `'unsafe-inline'`: every script is an external file and no markup
 carries a `style` attribute. Utility classes in the stylesheet exist for that
-reason.
+reason — `.sk-w1`…`.sk-w5` for skeleton widths, for instance.
+
+**This is easy to trip over.** `style-src 'self'` blocks `style` attributes, so
+any markup built in JS with `style="…"` is silently dropped — the element still
+renders, just without the style, which looks like a CSS bug rather than a policy
+one. Emit a class instead. Setting a property through CSSOM
+(`el.style.setProperty('--i', …)`, which is how the motion stagger works) is
+**not** affected, because CSP governs parsing inline style text, not the object
+model.
 
 ### Escaping by default
 

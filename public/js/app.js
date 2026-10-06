@@ -314,12 +314,14 @@ function switchSection(sectionId) {
     const heading = document.getElementById('pageTitle');
     if (heading && title) heading.textContent = title;
 
-    if (window.innerWidth <= 768) closeSidebar();
+    if (isDrawerLayout()) closeSidebar();
 
     // Reflect the section in the URL so Back works and links are shareable.
     if (window.location.hash !== `#${sectionId}`) {
         history.replaceState(null, '', `#${sectionId}`);
     }
+
+    staggerSection(document.getElementById(sectionId));
 
     document.dispatchEvent(new CustomEvent('section:shown', { detail: { sectionId } }));
 }
@@ -340,6 +342,201 @@ function toggleSidebar() {
     const sidebar = document.querySelector('.sidebar');
     if (sidebar?.classList.contains('open')) closeSidebar();
     else openSidebar();
+}
+
+/* --------------------------------------------------------------------------
+   Sidebar collapse
+
+   Two different behaviours share one element. Below the drawer breakpoint the
+   sidebar slides over the content and `.open` controls it. Above it, the
+   sidebar is a permanent column and `body.nav-collapsed` narrows it to an icon
+   rail. The two never apply at once, which is why the collapsed CSS is behind
+   a min-width guard.
+   -------------------------------------------------------------------------- */
+
+/** The width at which the sidebar stops being a column and becomes a drawer.
+ *  Must match the `max-width: 860px` breakpoint in styles.css. */
+const DRAWER_BREAKPOINT = 860;
+
+const NAV_COLLAPSED_KEY = 'edupay.navCollapsed';
+
+function isDrawerLayout() {
+    return window.innerWidth <= DRAWER_BREAKPOINT;
+}
+
+/** Honour the OS "reduce motion" setting for JS-driven motion too — the CSS
+ *  media query cannot reach animations we drive from script. */
+function prefersReducedMotion() {
+    return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+}
+
+/* localStorage is unavailable in some privacy modes and throws rather than
+   returning null, so every access is guarded. A failure here must not stop the
+   dashboard loading — it just means the preference does not persist. */
+function readNavCollapsed() {
+    try {
+        return localStorage.getItem(NAV_COLLAPSED_KEY) === '1';
+    } catch {
+        return false;
+    }
+}
+
+function writeNavCollapsed(collapsed) {
+    try {
+        localStorage.setItem(NAV_COLLAPSED_KEY, collapsed ? '1' : '0');
+    } catch {
+        /* Preference simply will not survive a reload. */
+    }
+}
+
+function setNavCollapsed(collapsed, { persist = true } = {}) {
+    document.body.classList.toggle('nav-collapsed', collapsed);
+
+    const button = document.querySelector('.sidebar-collapse');
+    if (button) {
+        button.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+        button.setAttribute('aria-label', collapsed ? 'Expand navigation' : 'Collapse navigation');
+    }
+
+    if (collapsed) hideRailTip();
+    if (persist) writeNavCollapsed(collapsed);
+}
+
+function initSidebarCollapse() {
+    const button = document.querySelector('.sidebar-collapse');
+
+    // Restore the stored preference, but never into the drawer layout.
+    if (!isDrawerLayout() && readNavCollapsed()) setNavCollapsed(true, { persist: false });
+
+    button?.addEventListener('click', () => {
+        setNavCollapsed(!document.body.classList.contains('nav-collapsed'));
+    });
+
+    // Crossing the breakpoint: drop the rail on the way down to the drawer, and
+    // restore the stored preference on the way back up.
+    window.matchMedia(`(max-width: ${DRAWER_BREAKPOINT}px)`).addEventListener('change', (event) => {
+        if (event.matches) setNavCollapsed(false, { persist: false });
+        else if (readNavCollapsed()) setNavCollapsed(true, { persist: false });
+    });
+
+    initRailTips();
+}
+
+/* --- Rail tooltips ------------------------------------------------------- */
+
+/* A collapsed rail is icon-only, so every item needs its name on hover. One
+   shared node on <body>, positioned from script: .sidebar-nav scrolls, and a
+   scroll container clips both axes, so a tooltip drawn inside the sidebar
+   would be cut off at its edge. */
+
+let railTip = null;
+
+function hideRailTip() {
+    railTip?.classList.remove('show');
+}
+
+function showRailTip(item) {
+    if (!document.body.classList.contains('nav-collapsed') || isDrawerLayout()) return;
+
+    const label = item.dataset.title || item.textContent.trim();
+    if (!label) return;
+
+    if (!railTip) {
+        railTip = document.createElement('div');
+        railTip.className = 'rail-tip';
+        railTip.setAttribute('role', 'presentation');
+        document.body.appendChild(railTip);
+    }
+
+    // The badge is a bare dot when collapsed, so the count moves into the tip —
+    // otherwise "3 approvals waiting" becomes an unreadable blob.
+    const badge = item.querySelector('.nav-badge:not([hidden])');
+    railTip.textContent = label;
+    if (badge?.textContent.trim()) {
+        const count = document.createElement('span');
+        count.className = 'rail-tip-count';
+        count.textContent = badge.textContent.trim();
+        railTip.appendChild(count);
+    }
+
+    // Measured after the text is in, so the vertical centring is correct.
+    const rect = item.getBoundingClientRect();
+    railTip.style.left = `${rect.right + 14}px`;
+    railTip.style.top = `${rect.top + rect.height / 2 - railTip.offsetHeight / 2}px`;
+    railTip.classList.add('show');
+}
+
+function initRailTips() {
+    document.querySelectorAll('.sidebar .nav-item, .sidebar-footer .btn').forEach(item => {
+        item.addEventListener('mouseenter', () => showRailTip(item));
+        item.addEventListener('focus', () => showRailTip(item));
+        item.addEventListener('mouseleave', hideRailTip);
+        item.addEventListener('blur', hideRailTip);
+        item.addEventListener('click', hideRailTip);
+    });
+
+    // A tip anchored to a nav item would otherwise hang in place while the
+    // list moves underneath it.
+    document.querySelector('.sidebar-nav')?.addEventListener('scroll', hideRailTip, { passive: true });
+}
+
+/* --------------------------------------------------------------------------
+   Motion
+
+   Entrances are CSS; what JS supplies is the ordering. Setting `--i` on each
+   element lets one `animation-delay: calc(var(--i) * 45ms)` rule produce a
+   stagger without a rule per position.
+   -------------------------------------------------------------------------- */
+
+/** Order the direct children of a section so they rise in reading order. */
+function staggerSection(section) {
+    if (!section || prefersReducedMotion()) return;
+
+    const blocks = section.querySelectorAll(':scope > .hero, :scope > .card, :scope > .toolbar');
+    blocks.forEach((el, i) => el.style.setProperty('--i', String(i)));
+
+    // Tiles are their own sequence — they sit side by side, so they should not
+    // inherit the delay of the block they are in.
+    section.querySelectorAll(':scope > .stats-grid > *').forEach((el, i) => {
+        el.style.setProperty('--i', String(i));
+    });
+}
+
+/** Cap on staggered rows. Past this the stagger stops being life and becomes a
+ *  wait — a 25-row page would otherwise take ~650ms to finish arriving. */
+const STAGGER_ROW_CAP = 12;
+
+function staggerRows(tbody) {
+    if (!tbody || prefersReducedMotion()) return;
+
+    const rows = tbody.querySelectorAll('tr');
+    if (rows.length <= 1) return;   // A lone empty-state row should not animate in.
+
+    rows.forEach((row, i) => {
+        if (i < STAGGER_ROW_CAP) row.style.setProperty('--i', String(i));
+    });
+}
+
+/** Give the sticky topbar an edge once content has scrolled beneath it. */
+function initTopbarScroll() {
+    const topbar = document.querySelector('.topbar');
+    if (!topbar) return;
+
+    let queued = false;
+    const update = () => {
+        topbar.classList.toggle('scrolled', window.scrollY > 6);
+        queued = false;
+    };
+
+    window.addEventListener('scroll', () => {
+        // Coalesce to one class write per frame; scroll fires far faster.
+        if (!queued) {
+            queued = true;
+            requestAnimationFrame(update);
+        }
+    }, { passive: true });
+
+    update();
 }
 
 /* --------------------------------------------------------------------------
@@ -438,10 +635,21 @@ function emptyRow(colspan, message, hint) {
 }
 
 function loadingRow(colspan) {
-    return html`<tr class="empty-row"><td colspan="${colspan}">
-    <div class="empty-state"><span class="spinner" aria-hidden="true"></span>
-    <p class="empty-hint">Loading…</p></div>
-  </td></tr>`;
+    // Skeleton rows rather than a spinner: they stand in at the shape and size
+    // of the real thing, so the table does not visibly jump when data lands.
+    // colspan is always a column count from our own call sites, never input,
+    // but it is coerced anyway since it is interpolated into markup.
+    const columns = Math.max(1, Math.min(20, Number(colspan) || 1));
+    // Widths come from classes, not a style attribute: the dashboards run under
+    // `style-src 'self'` with no 'unsafe-inline', which blocks inline styles.
+    const cells = Array.from({ length: columns }, (_, i) =>
+        `<td><span class="skeleton skeleton-line sk-w${(i % 5) + 1}"></span></td>`
+    ).join('');
+
+    return Array.from({ length: 3 }, () =>
+        `<tr class="skeleton-row" aria-hidden="true">${cells}</tr>`
+    ).join('')
+        + `<tr class="sr-only"><td colspan="${columns}">Loading…</td></tr>`;
 }
 
 /** Case-insensitive substring match across the chosen fields. */
@@ -518,6 +726,7 @@ function createTable(options) {
                 : emptyRow(columns, emptyMessage, emptyHint);
         } else {
             body.innerHTML = slice.map(renderRow).join('');
+            staggerRows(body);
         }
 
         if (counter) {
@@ -1060,6 +1269,8 @@ function initDashboard({ role, onSection } = {}) {
     // Sidebar
     document.querySelector('.menu-toggle')?.addEventListener('click', toggleSidebar);
     document.querySelector('.mobile-close-btn')?.addEventListener('click', closeSidebar);
+    initSidebarCollapse();
+    initTopbarScroll();
 
     if (!document.querySelector('.sidebar-overlay')) {
         const overlay = document.createElement('div');
@@ -1081,7 +1292,10 @@ function initDashboard({ role, onSection } = {}) {
         modal.addEventListener('click', (event) => { if (event.target === modal) closeModal(modal.id); });
     });
     document.addEventListener('keydown', (event) => {
-        if (event.key === 'Escape') closeTopModal();
+        if (event.key === 'Escape') {
+            closeTopModal();
+            hideRailTip();
+        }
     });
 
     if (onSection) document.addEventListener('section:shown', (event) => onSection(event.detail.sectionId));

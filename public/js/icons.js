@@ -47,7 +47,15 @@ const ICON_PATHS = {
     creditCard: '<rect x="2.5" y="5" width="19" height="14" rx="2.2"/><path d="M2.5 9.8h19"/><path d="M6.4 14.8h3"/>',
     logout: '<path d="M9.4 20H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h3.4"/><path d="m15.2 16.4 4.4-4.4-4.4-4.4"/><path d="M19.6 12H9.4"/>',
     plus: '<path d="M12 5v14M5 12h14"/>',
-    refresh: '<path d="M20.6 11a8.6 8.6 0 0 0-14.7-4.6L3.4 8.8"/><path d="M3.4 13a8.6 8.6 0 0 0 14.7 4.6l2.5-2.4"/><path d="M3.4 4.4v4.4h4.4M20.6 19.6v-4.4h-4.4"/>'
+    refresh: '<path d="M20.6 11a8.6 8.6 0 0 0-14.7-4.6L3.4 8.8"/><path d="M3.4 13a8.6 8.6 0 0 0 14.7 4.6l2.5-2.4"/><path d="M3.4 4.4v4.4h4.4M20.6 19.6v-4.4h-4.4"/>',
+
+    // Chrome. `panelLeft` is the sidebar-collapse control: a panel outline with
+    // the rail picked out, so the button depicts the thing it acts on. It is
+    // drawn symmetrically about the rail line, which lets CSS flip it with a
+    // 180deg rotation to mean "expand" without a second icon.
+    panelLeft: '<rect x="3.2" y="4.2" width="17.6" height="15.6" rx="2.4"/><path d="M9.4 4.2v15.6"/><path d="m16.8 9.6-2.4 2.4 2.4 2.4"/>',
+    chevronLeft: '<path d="m14.4 7.2-4.8 4.8 4.8 4.8"/>',
+    chevronRight: '<path d="m9.6 7.2 4.8 4.8-4.8 4.8"/>'
 };
 
 // Friendlier aliases, so markup can say what it means.

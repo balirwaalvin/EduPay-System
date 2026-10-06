@@ -156,8 +156,27 @@
   --font: "Inter", "Segoe UI", Roboto, -apple-system, BlinkMacSystemFont, Helvetica, Arial, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
 
+  /* --- Motion -----------------------------------------------------------
+     Three eases, each with a job. `--ease` is the neutral workhorse for
+     colour and small state changes. `--ease-out` decelerates hard, which is
+     what makes an entrance feel like it *arrives* rather than slides.
+     `--ease-spring` overshoots slightly, for things that should feel
+     physical when they appear — a modal, an icon chip, a badge.
+
+     Durations stay short. Anything over ~300ms on a control reads as lag,
+     not polish, and this is a payroll tool people use all day. */
   --ease: cubic-bezier(.4, 0, .2, 1);
+  --ease-out: cubic-bezier(.16, 1, .3, 1);
+  --ease-spring: cubic-bezier(.34, 1.56, .64, 1);
+
+  --t-fast: 110ms var(--ease);
   --t: 170ms var(--ease);
+  --t-slow: 280ms var(--ease-out);
+  --t-panel: 320ms var(--ease-out);
+
+  /* Scrollbar geometry, so the gutter can be reasoned about in one place. */
+  --scrollbar-size: 11px;
+  --scrollbar-inset: 3px;
 }
 
 /* ==========================================================================
@@ -244,6 +263,93 @@ code {
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
+}
+
+/* ==========================================================================
+   Scrollbars
+
+   The scrollbar is chrome people see on every screen, all day, so it carries
+   the brand rather than the browser default. A jade thumb floating in a
+   transparent track: `border: transparent` + `background-clip: padding-box`
+   insets the thumb so it reads as a pill with air around it, not a bar
+   wedged against the edge.
+
+   Firefox gets the standard `scrollbar-width`/`scrollbar-color` instead — same
+   colours, plainer shape. Those are gated to Firefox on purpose; see the
+   @supports block at the end of this section for why they cannot simply be
+   declared alongside.
+   ========================================================================== */
+
+::-webkit-scrollbar {
+  width: var(--scrollbar-size);
+  height: var(--scrollbar-size);
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: var(--primary-200);
+  background-clip: padding-box;
+  border: var(--scrollbar-inset) solid transparent;
+  border-radius: var(--r-pill);
+  transition: background-color var(--t);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--primary-400);
+}
+
+::-webkit-scrollbar-thumb:active {
+  background-color: var(--primary-600);
+}
+
+/* Where both scrollbars meet. Left unstyled it renders as a grey notch. */
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* The page scrollbar sits on the canvas, so its thumb needs a touch more
+   contrast than one inside a white card. */
+html::-webkit-scrollbar-thumb {
+  background-color: var(--primary-300);
+}
+
+html::-webkit-scrollbar-thumb:hover {
+  background-color: var(--primary-500);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+/* Firefox. Deliberately gated rather than applied globally: Blink ignores every
+   ::-webkit-scrollbar rule on any element that also sets `scrollbar-width` or
+   `scrollbar-color`, so declaring both unconditionally would silently throw away
+   the inset pill above and leave Chrome with the plainer treatment.
+
+   The query asks "has the standard properties but not the WebKit pseudo-element"
+   — true only in Firefox. Chrome and Safari fall through to the rules above. */
+@supports (scrollbar-width: thin) and (not selector(::-webkit-scrollbar)) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--primary-200) transparent;
+  }
+
+  html {
+    scrollbar-color: var(--primary-300) transparent;
+  }
+
+  .table-wrap {
+    scrollbar-color: var(--primary-300) var(--primary-50);
+  }
+
+  /* Firefox cannot hide a scrollbar until hover, so the sidebar's is simply
+     always there, in the quietest tint. */
+  .sidebar-nav {
+    scrollbar-color: var(--primary-100) transparent;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -760,6 +866,10 @@ body.auth-page {
   box-shadow: var(--shadow);
   overflow: hidden;
   z-index: 60;
+  /* `width` is driven by the --sidebar-width token, which a custom property
+     cannot itself transition without @property. Transitioning the resolved
+     width works regardless, and keeps the collapse readable as one motion. */
+  transition: width var(--t-panel);
 }
 
 .sidebar-header {
@@ -827,14 +937,29 @@ body.auth-page {
   overscroll-behavior: contain;
 }
 
+/* Narrower inside the rail, so the thumb never crowds the nav labels. It
+   stays invisible until the sidebar is hovered — a scrollbar parked beside
+   navigation is noise when you are not using it. */
 .sidebar-nav::-webkit-scrollbar {
-  width: 6px;
+  width: 8px;
 }
 
 .sidebar-nav::-webkit-scrollbar-thumb {
-  background: var(--ink-200);
-  border-radius: var(--r-pill);
+  background-color: transparent;
+  background-clip: padding-box;
+  border: 2px solid transparent;
+  transition: background-color var(--t-slow);
 }
+
+.sidebar:hover .sidebar-nav::-webkit-scrollbar-thumb {
+  background-color: var(--primary-200);
+}
+
+.sidebar-nav:hover::-webkit-scrollbar-thumb {
+  background-color: var(--primary-400);
+}
+
+
 
 .nav-section {
   margin-bottom: 18px;
@@ -914,6 +1039,197 @@ body.auth-page {
   border-top: 1px solid var(--border);
 }
 
+/* --- The collapse control ---------------------------------------------- */
+
+/* Shares the header's top-right corner with .mobile-close-btn; the two are
+   never displayed at the same breakpoint. */
+.sidebar-collapse {
+  position: absolute;
+  top: 20px;
+  right: 16px;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--r-xs);
+  color: var(--ink-400);
+  cursor: pointer;
+  transition: var(--t);
+}
+
+.sidebar-collapse:hover {
+  background: var(--primary-tint);
+  border-color: var(--primary-line);
+  color: var(--primary-deep);
+}
+
+.sidebar-collapse .icon {
+  transition: transform var(--t-panel);
+}
+
+/* One icon, two meanings — the panel glyph is drawn symmetrically about its
+   rail, so flipping it turns "collapse" into "expand". */
+body.nav-collapsed .sidebar-collapse .icon {
+  transform: rotate(180deg);
+}
+
+/* --- Collapsed rail ----------------------------------------------------- */
+
+/* Desktop only. Below 860px the sidebar is a drawer, not a rail: it has its
+   own fixed width and slides over the content, so collapsing is meaningless
+   there — and without this guard the label-hiding rules would turn the mobile
+   drawer into icons with no way to read them. */
+@media (min-width: 861px) {
+
+  /* Collapsing is a single token change: every width, margin and offset is
+     already derived from --sidebar-width, so the rail needs no parallel layout.
+     What remains below is only the business of hiding labels. */
+  body.nav-collapsed {
+    --sidebar-width: 76px;
+  }
+
+  body.nav-collapsed .sidebar-header {
+    padding: 22px 0 16px;
+  }
+
+  /* font-size: 0 collapses the "EduPay" text nodes without touching ::before,
+     which carries the mark at a fixed 34px. Avoids wrapping the wordmark in a
+     span purely so CSS has a handle on it. */
+  body.nav-collapsed .sidebar-header h2 {
+    font-size: 0;
+    justify-content: center;
+  }
+
+  body.nav-collapsed .sidebar-header h2::before {
+    margin-right: 0;
+  }
+
+  body.nav-collapsed .sidebar-header .user-role,
+  body.nav-collapsed .nav-section-title {
+    display: none;
+  }
+
+  /* The control must stay reachable in the rail — hiding it here is a one-way
+     door: collapse once and the only way back is a reload. In the rail there is
+     no corner to spare beside the 34px mark, so the header becomes a column and
+     the control sits beneath it. */
+  body.nav-collapsed .sidebar-header {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  body.nav-collapsed .sidebar-collapse {
+    position: static;
+    margin-top: 12px;
+  }
+
+  /* The section titles carried the grouping; with them gone a hairline does it,
+     so the rail does not read as one undifferentiated stack of icons. */
+  body.nav-collapsed .nav-section + .nav-section {
+    border-top: 1px solid var(--border);
+    padding-top: 14px;
+    margin-bottom: 14px;
+  }
+
+  body.nav-collapsed .sidebar-nav {
+    padding: 10px 14px 18px;
+  }
+
+  body.nav-collapsed .nav-item {
+    font-size: 0;
+    justify-content: center;
+    gap: 0;
+    padding: 11px 0;
+  }
+
+  /* The short active bar would sit under a centred icon, so the whole chip
+     becomes the active surface instead. */
+  body.nav-collapsed .nav-item.active::before {
+    display: none;
+  }
+
+  body.nav-collapsed .nav-item.active {
+    background: var(--primary-tint);
+    box-shadow: inset 0 0 0 1px var(--primary-line);
+  }
+
+  /* A count still has to be visible at 76px, so the badge drops its digits and
+     becomes a dot pinned to the icon. */
+  body.nav-collapsed .nav-badge {
+    position: absolute;
+    top: 7px;
+    right: 13px;
+    margin: 0;
+    min-width: 9px;
+    width: 9px;
+    height: 9px;
+    padding: 0;
+    font-size: 0;
+    border: 2px solid var(--surface);
+    box-sizing: content-box;
+  }
+
+  body.nav-collapsed .sidebar-footer {
+    padding: 14px 14px 18px;
+  }
+
+  body.nav-collapsed .sidebar-footer .btn {
+    font-size: 0;
+    gap: 0;
+    padding: 10px 0;
+  }
+}
+
+/* --- Rail tooltip ------------------------------------------------------ */
+
+/* Positioned from JS rather than as a ::after on the nav item: .sidebar-nav
+   scrolls vertically, and a scroll container clips on both axes, so a
+   pseudo-element tooltip would be cut off at the rail's edge. One shared node
+   on <body> sidesteps that entirely. */
+.rail-tip {
+  position: fixed;
+  z-index: 80;
+  padding: 7px 11px;
+  background: var(--ink-900);
+  color: #fff;
+  font-size: .8rem;
+  font-weight: 600;
+  white-space: nowrap;
+  border-radius: var(--r-xs);
+  box-shadow: var(--shadow-lg);
+  pointer-events: none;
+  opacity: 0;
+  transform: translateX(-6px);
+  transition: opacity var(--t-fast), transform var(--t-fast);
+}
+
+.rail-tip.show {
+  opacity: 1;
+  transform: none;
+}
+
+.rail-tip::before {
+  content: "";
+  position: absolute;
+  left: -4px;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  transform: translateY(-50%) rotate(45deg);
+  background: var(--ink-900);
+  border-radius: 1px;
+}
+
+.rail-tip .rail-tip-count {
+  margin-left: 7px;
+  color: var(--secondary-300);
+  font-weight: 800;
+}
+
 /* --- Main column ------------------------------------------------------- */
 
 .main-content {
@@ -923,6 +1239,7 @@ body.auth-page {
   display: flex;
   flex-direction: column;
   padding-right: var(--gutter);
+  transition: margin-left var(--t-panel);
 }
 
 .topbar {
@@ -1734,17 +2051,25 @@ select {
   background-attachment: local, local, scroll, scroll;
 }
 
+/* A horizontal scrollbar is also an affordance — it is the signal that there
+   are more columns. So unlike the vertical ones it keeps a visible track. */
 .table-wrap::-webkit-scrollbar {
-  height: 8px;
+  height: 9px;
 }
 
 .table-wrap::-webkit-scrollbar-thumb {
-  background: var(--ink-300);
+  background-color: var(--primary-300);
+  background-clip: padding-box;
+  border: 2px solid transparent;
   border-radius: var(--r-pill);
 }
 
+.table-wrap::-webkit-scrollbar-thumb:hover {
+  background-color: var(--primary-500);
+}
+
 .table-wrap::-webkit-scrollbar-track {
-  background: var(--ink-50);
+  background: var(--primary-50);
   border-radius: var(--r-pill);
 }
 
@@ -2303,6 +2628,326 @@ td.wrap {
    Responsive
    ========================================================================== */
 
+/* ==========================================================================
+   Motion
+
+   Two rules govern everything here.
+
+   One: motion explains, it does not decorate. A section's contents rise in
+   sequence because that is the order you read them. A stat card lifts on hover
+   because it is interactive. A row flashes jade because it just changed. Where
+   motion had nothing to say, there is none.
+
+   Two: it happens once and gets out of the way. Entrances are 300–400ms and do
+   not repeat; the only looping animation is the pending-badge pulse, which is
+   tracking something that genuinely still needs attention. Nothing animates
+   layout — every keyframe below touches `transform`, `opacity`, `box-shadow` or
+   `background` only, so none of it triggers reflow.
+
+   The reduced-motion block near the top of this file flattens all of it to
+   ~0ms, so the interface stays entirely usable without a single frame.
+   ========================================================================== */
+
+/* --- Entrance ----------------------------------------------------------- */
+
+@keyframes riseIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes popIn {
+  from {
+    opacity: 0;
+    transform: scale(.82);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Only the section being shown animates. `.active` is set by switchSection,
+   so navigating re-runs the entrance — which is the point: it tells you the
+   page changed even when two sections look alike. */
+.page-section.active > .hero,
+.page-section.active > .stats-grid > *,
+.page-section.active > .card,
+.page-section.active > .toolbar {
+  animation: riseIn 380ms var(--ease-out) both;
+  animation-delay: calc(var(--i, 0) * 45ms);
+}
+
+/* The icon chip arrives after its card, with a slight overshoot, so the tile
+   assembles rather than appearing flat. */
+.page-section.active .stats-grid .stat-icon {
+  animation: popIn 320ms var(--ease-spring) both;
+  animation-delay: calc(var(--i, 0) * 45ms + 120ms);
+}
+
+/* --- Table rows --------------------------------------------------------- */
+
+/* Capped at 12: beyond that the stagger becomes a wait, and a long table
+   should just be there. JS stops setting --i past the cap. */
+tbody tr[style*="--i"] {
+  animation: riseIn 300ms var(--ease-out) both;
+  animation-delay: calc(var(--i, 0) * 26ms);
+}
+
+/* --- Nav --------------------------------------------------------------- */
+
+.nav-item:hover:not(.active) {
+  transform: translateX(2px);
+}
+
+.nav-item:active {
+  transform: translateX(2px) scale(.985);
+}
+
+.nav-icon,
+.nav-item .icon {
+  transition: transform var(--t) , color var(--t);
+}
+
+.nav-item:hover .icon {
+  transform: scale(1.1);
+}
+
+/* The active marker grows from nothing rather than cutting in. */
+.nav-item.active::before {
+  animation: barGrow 280ms var(--ease-spring) both;
+}
+
+@keyframes barGrow {
+  from {
+    height: 0;
+    opacity: 0;
+  }
+
+  to {
+    height: 18px;
+    opacity: 1;
+  }
+}
+
+/* --- Buttons ----------------------------------------------------------- */
+
+/* A press needs physical feedback or a slow request feels like a dead click. */
+.btn:active:not(:disabled) {
+  transform: translateY(1px) scale(.985);
+}
+
+.btn {
+  position: relative;
+  overflow: hidden;
+}
+
+/* A sheen crossing the primary button on hover. Transform-only, behind the
+   label, and off for everyone else — the quiet buttons stay quiet. */
+.btn-primary::after,
+.btn-accent::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(105deg, transparent 32%, rgba(255, 255, 255, .26) 50%, transparent 68%);
+  transform: translateX(-120%);
+  transition: transform 620ms var(--ease-out);
+  pointer-events: none;
+}
+
+.btn-primary:hover:not(:disabled)::after,
+.btn-accent:hover:not(:disabled)::after {
+  transform: translateX(120%);
+}
+
+.btn .icon {
+  transition: transform var(--t);
+}
+
+/* Refresh controls spin their glyph on hover — the icon previews the action. */
+.btn[data-action*="refresh"]:hover .icon,
+.btn[data-action*="reload"]:hover .icon {
+  transform: rotate(180deg);
+}
+
+/* --- Cards and tiles --------------------------------------------------- */
+
+.card {
+  transition: box-shadow var(--t-slow), transform var(--t-slow);
+}
+
+.card:hover {
+  box-shadow: var(--shadow);
+}
+
+.stat-card {
+  transition: box-shadow var(--t-slow), transform var(--t-slow), border-color var(--t-slow);
+}
+
+.stat-card:hover {
+  transform: translateY(-3px);
+  border-color: var(--primary-line);
+}
+
+.stat-card .stat-icon {
+  transition: transform var(--t-slow);
+}
+
+.stat-card:hover .stat-icon {
+  transform: scale(1.08) rotate(-4deg);
+}
+
+/* A jade wash that rises out of the bottom edge on hover, so the whole tile
+   responds and not just its shadow. */
+.stat-card::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--primary), var(--secondary));
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform var(--t-slow);
+}
+
+.stat-card:hover::after {
+  transform: scaleX(1);
+}
+
+/* --- Pending badge ----------------------------------------------------- */
+
+/* The one looping animation in the system, and it is load-bearing: it marks
+   work queued behind a person. A ring expands out of the badge and fades —
+   the badge itself never moves, so the number stays readable. */
+@keyframes pendingPulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(245, 158, 11, .5);
+  }
+
+  70% {
+    box-shadow: 0 0 0 7px rgba(245, 158, 11, 0);
+  }
+
+  100% {
+    box-shadow: 0 0 0 0 rgba(245, 158, 11, 0);
+  }
+}
+
+.nav-badge:not([hidden]) {
+  animation: pendingPulse 2.4s var(--ease-out) infinite;
+}
+
+/* --- Topbar ------------------------------------------------------------ */
+
+/* The topbar is sticky over a scrolling canvas; once content passes beneath it
+   needs an edge, or the two planes merge. JS toggles .scrolled. */
+.topbar {
+  transition: box-shadow var(--t-slow), background var(--t-slow);
+}
+
+.topbar.scrolled {
+  box-shadow: 0 6px 20px -10px rgba(12, 21, 34, .22);
+  background: rgba(242, 245, 250, .86);
+  backdrop-filter: blur(9px);
+}
+
+/* --- Modals and toasts ------------------------------------------------- */
+
+/* Upgraded from the neutral ease to a spring: a dialog that overshoots a hair
+   reads as placed on top of the page rather than faded into it. The backdrop
+   fades separately and faster, so the dialog lands after the page dims. */
+.modal.active {
+  animation: fadeIn 160ms var(--ease-out);
+}
+
+.modal-content {
+  animation: modalIn 280ms var(--ease-spring);
+}
+
+/* --- Skeletons --------------------------------------------------------- */
+
+/* For the gap between a section appearing and its data arriving. A sweep
+   across a tinted block says "loading, and this is the shape of what is
+   coming" far better than a centred spinner. */
+.skeleton-row td {
+  padding-top: 15px;
+  padding-bottom: 15px;
+}
+
+.skeleton-row:hover td {
+  background: none;
+}
+
+.skeleton-line {
+  display: block;
+  height: 11px;
+}
+
+/* Varying the widths stops a loading table reading as a solid grey slab. These
+   are classes rather than inline styles because the dashboards send
+   `style-src 'self'`, which blocks style attributes outright. */
+.sk-w1 { width: 68%; }
+.sk-w2 { width: 84%; }
+.sk-w3 { width: 52%; }
+.sk-w4 { width: 76%; }
+.sk-w5 { width: 60%; }
+
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: var(--ink-100);
+  border-radius: var(--r-xs);
+  color: transparent;
+}
+
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .72), transparent);
+  transform: translateX(-100%);
+  animation: shimmer 1.4s var(--ease) infinite;
+}
+
+@keyframes shimmer {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+/* --- Sidebar drawer ---------------------------------------------------- */
+
+/* The mobile overlay fades rather than snapping on. It is display:none when
+   closed, so the fade needs the animation rather than a transition. */
+.sidebar-overlay.open {
+  animation: fadeIn 220ms var(--ease-out);
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+/* Labels fade as the rail narrows, so text does not visibly squash into the
+   edge mid-transition. */
+.nav-item,
+.sidebar-header h2,
+.sidebar-footer .btn {
+  transition: var(--t), font-size var(--t-fast) linear, padding var(--t-panel);
+}
+
 @media (max-width: 1100px) {
   :root {
     --sidebar-width: 238px;
@@ -2335,6 +2980,12 @@ td.wrap {
   .menu-toggle {
     display: grid;
     place-items: center;
+  }
+
+  /* No rail at this width, so no control for it. The drawer's close button
+     takes over the corner they share. */
+  .sidebar-collapse {
+    display: none;
   }
 
   .main-content {
