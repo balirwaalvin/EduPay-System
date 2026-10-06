@@ -175,6 +175,7 @@ async function loadStats() {
         const stats = await apiRequest('/admin/stats');
 
         document.getElementById('statUsers').textContent = stats.totalUsers;
+        setText('heroAccounts', stats.totalUsers);
         document.getElementById('statPendingActivation').textContent = stats.pendingActivation
             ? `${stats.pendingActivation} not yet activated`
             : 'All activated';

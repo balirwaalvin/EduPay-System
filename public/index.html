@@ -12,71 +12,90 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description"
-    content="EduPay — school payroll system. Secure sign-in for administrators, HR, accountants and teachers.">
-  <meta name="color-scheme" content="dark light">
+    content="EduPay — school payroll. Secure sign-in for administrators, HR, accountants and teachers.">
+  <meta name="color-scheme" content="light">
+  <meta name="theme-color" content="#0B655F">
   <title>Sign in · EduPay</title>
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <link rel="stylesheet" href="/css/styles.css">
 </head>
 
 <body class="auth-page">
-  <!--
-    The starfield is drawn with CSS gradients on three layers rather than ~42
-    absolutely-positioned animated elements, which kept low-end devices
-    repainting constantly. It is also disabled under prefers-reduced-motion.
-  -->
-  <div class="space-backdrop" aria-hidden="true">
-    <div class="space-layer space-layer-far"></div>
-    <div class="space-layer space-layer-mid"></div>
-    <div class="space-layer space-layer-near"></div>
-    <div class="space-glow"></div>
-  </div>
+  <main class="auth-split">
 
-  <main class="auth-wrapper">
-    <div class="auth-card">
-      <header class="auth-logo">
-        <h1>Edu<span>Pay</span></h1>
-        <p>School Payroll System</p>
-      </header>
+    <!-- Brand panel. Decorative, so it is skipped by screen readers. -->
+    <section class="auth-brand">
+      <div class="auth-brand-mark">
+        <span class="auth-brand-badge" aria-hidden="true">₵</span>
+        <span>EduPay</span>
+      </div>
 
-      <p id="loginError" class="auth-alert auth-alert-error" role="alert" hidden></p>
-      <p id="loginNotice" class="auth-alert auth-alert-info" role="status" hidden></p>
-
-      <form id="loginForm" class="auth-form" novalidate>
-        <div class="form-group">
-          <label for="username">Username</label>
-          <input type="text" id="username" name="username" autocomplete="username" autocapitalize="none"
-            spellcheck="false" required placeholder="your.username">
-        </div>
-
-        <div class="form-group">
-          <label for="password">Password</label>
-          <input type="password" id="password" name="password" autocomplete="current-password" required
-            placeholder="Your password">
-        </div>
-
-        <button type="submit" id="loginBtn" class="btn btn-primary btn-block">Sign in</button>
-
-        <p class="auth-links">
-          <a href="/forgot-password.html">Forgotten your password?</a>
+      <div class="auth-brand-copy">
+        <h2>Payroll your staff can trust.</h2>
+        <p>
+          Salaries, PAYE and NSSF, leave and advances — calculated once, approved by
+          the right person, and recorded where everyone can see it.
         </p>
-      </form>
+      </div>
 
-      <form id="mfaForm" class="auth-form" novalidate hidden>
-        <div class="form-group">
-          <label for="otpCode">Verification code</label>
-          <input type="text" id="otpCode" name="otpCode" inputmode="numeric" autocomplete="one-time-code"
-            maxlength="6" pattern="\d{6}" required placeholder="000000" class="otp-input">
-          <p class="form-hint" id="mfaCountdown" role="status" aria-live="polite"></p>
-        </div>
+      <ul class="auth-brand-points">
+        <li>Banded PAYE and both NSSF shares, worked out for you</li>
+        <li>Processed by the accountant, approved by HR — never the same person</li>
+        <li>Every payslip, decision and payment kept in the audit trail</li>
+      </ul>
+    </section>
 
-        <button type="submit" id="verifyBtn" class="btn btn-primary btn-block">Verify and continue</button>
-        <button type="button" id="resendBtn" class="btn btn-ghost btn-block">Send a new code</button>
-        <button type="button" id="backToLoginBtn" class="btn btn-ghost btn-block">Back to sign in</button>
-      </form>
-    </div>
+    <!-- Sign-in form -->
+    <section class="auth-pane">
+      <div class="auth-shell">
+        <header class="auth-head">
+          <h1>Welcome back</h1>
+          <p>Sign in to your EduPay account.</p>
+        </header>
 
-    <p class="auth-footnote">Need an account? Your school administrator creates it for you.</p>
+        <p id="loginError" class="auth-alert auth-alert-error" role="alert" hidden></p>
+        <p id="loginNotice" class="auth-alert auth-alert-info" role="status" hidden></p>
+
+        <form id="loginForm" class="auth-form" novalidate>
+          <div class="form-group">
+            <label for="username">Username</label>
+            <input type="text" id="username" name="username" autocomplete="username" autocapitalize="none"
+              spellcheck="false" required placeholder="your.username">
+          </div>
+
+          <div class="form-group">
+            <label for="password">Password</label>
+            <div class="input-reveal">
+              <input type="password" id="password" name="password" autocomplete="current-password" required
+                placeholder="Your password">
+              <button type="button" class="reveal-btn" data-reveal="password" aria-label="Show password"
+                aria-pressed="false">👁</button>
+            </div>
+          </div>
+
+          <button type="submit" id="loginBtn" class="btn btn-primary btn-block">Sign in</button>
+
+          <p class="auth-links">
+            <a href="/forgot-password.html">Forgotten your password?</a>
+          </p>
+        </form>
+
+        <form id="mfaForm" class="auth-form" novalidate hidden>
+          <div class="form-group">
+            <label for="otpCode">Verification code</label>
+            <input type="text" id="otpCode" name="otpCode" inputmode="numeric" autocomplete="one-time-code"
+              maxlength="6" pattern="\d{6}" required placeholder="000000" class="otp-input">
+            <p class="form-hint" id="mfaCountdown" role="status" aria-live="polite"></p>
+          </div>
+
+          <button type="submit" id="verifyBtn" class="btn btn-primary btn-block">Verify and continue</button>
+          <button type="button" id="resendBtn" class="btn btn-secondary btn-block">Send a new code</button>
+          <button type="button" id="backToLoginBtn" class="btn btn-ghost btn-block">Back to sign in</button>
+        </form>
+
+        <p class="auth-footnote">Your school administrator creates accounts.</p>
+      </div>
+    </section>
   </main>
 
   <script src="/js/app.js"></script>

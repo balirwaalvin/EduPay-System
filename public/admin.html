@@ -87,33 +87,50 @@
 
         <!-- Dashboard -->
         <section id="dashboard" class="page-section">
+          <div class="hero">
+            <div class="hero-inner">
+              <div>
+                <p class="hero-eyebrow">Administration</p>
+                <h2>System overview</h2>
+                <p>Accounts, payroll settings and the audit trail — everything that governs how EduPay behaves.</p>
+                <div class="hero-chips">
+                <span class="hero-chip"><span aria-hidden="true">🔐</span> Role-based access</span>
+                <span class="hero-chip"><span aria-hidden="true">📋</span> Full audit trail</span>
+                </div>
+              </div>
+              <div class="hero-aside">
+                <p class="hero-figure" id="heroAccounts">—</p>
+                <p class="hero-figure-label">accounts</p>
+              </div>
+            </div>
+          </div>
           <div class="stats-grid">
-            <div class="stat-card">
+            <div class="stat-card" data-icon="👥">
               <p class="stat-label">Total accounts</p>
               <p class="stat-value" id="statUsers">—</p>
               <p class="stat-hint" id="statPendingActivation"></p>
             </div>
-            <div class="stat-card accent-info">
+            <div class="stat-card accent-info" data-icon="👑">
               <p class="stat-label">Administrators</p>
               <p class="stat-value" id="statAdmins">—</p>
               <p class="stat-hint">Active</p>
             </div>
-            <div class="stat-card accent-info">
+            <div class="stat-card accent-info" data-icon="🏢">
               <p class="stat-label">HR</p>
               <p class="stat-value" id="statHr">—</p>
               <p class="stat-hint">Active</p>
             </div>
-            <div class="stat-card accent-info">
+            <div class="stat-card accent-info" data-icon="🧾">
               <p class="stat-label">Accountants</p>
               <p class="stat-value" id="statAccountants">—</p>
               <p class="stat-hint">Active</p>
             </div>
-            <div class="stat-card accent-success">
+            <div class="stat-card accent-success" data-icon="👩‍🏫">
               <p class="stat-label">Teachers</p>
               <p class="stat-value" id="statTeachers">—</p>
               <p class="stat-hint">Active</p>
             </div>
-            <div class="stat-card accent-warning">
+            <div class="stat-card accent-warning" data-icon="💰">
               <p class="stat-label">Payroll runs</p>
               <p class="stat-value" id="statPayrolls">—</p>
               <p class="stat-hint" id="statRecentPayroll"></p>

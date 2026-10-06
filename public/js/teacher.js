@@ -167,6 +167,7 @@ async function loadDashboard() {
         setCurrency(stats.currency);
 
         document.getElementById('statLatestNet').textContent = formatCurrency(stats.latestNetSalary);
+        setText('heroNet', formatCurrency(stats.latestNetSalary));
         document.getElementById('statLatestPeriod').textContent = stats.latestPeriod
             ? `For ${stats.latestPeriod}`
             : 'No payslips yet';

@@ -1139,6 +1139,31 @@ function initChangePasswordForm() {
     });
 }
 
+/**
+ * Wire every password reveal control on the page.
+ *
+ * Progressive enhancement: the field works without it, and the button is only
+ * meaningful once scripting is available, so its state is kept in sync with
+ * `aria-pressed` for screen-reader users.
+ */
+function initPasswordReveals() {
+    document.querySelectorAll('.reveal-btn[data-reveal]').forEach(button => {
+        const input = document.getElementById(button.dataset.reveal);
+        if (!input) return;
+
+        button.addEventListener('click', () => {
+            const revealed = input.type === 'text';
+            input.type = revealed ? 'password' : 'text';
+            button.setAttribute('aria-pressed', String(!revealed));
+            button.setAttribute('aria-label', revealed ? 'Show password' : 'Hide password');
+            button.textContent = revealed ? '👁' : '🙈';
+            input.focus();
+        });
+    });
+}
+
+document.addEventListener('DOMContentLoaded', initPasswordReveals);
+
 /** Read a form into a plain object, trimming text values. */
 function readForm(formId) {
     const form = typeof formId === 'string' ? document.getElementById(formId) : formId;
@@ -1155,6 +1180,12 @@ function readForm(formId) {
     });
 
     return out;
+}
+
+/** Set an element's text if it exists. */
+function setText(id, value) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = value;
 }
 
 /** Populate a <select> with options. */

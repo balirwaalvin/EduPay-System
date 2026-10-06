@@ -354,6 +354,44 @@ administrators for every other operation.
 
 No framework and no build step. Three ideas carry most of the weight.
 
+### Design system
+
+Light mode only, deliberately: this is a finance product used in bright offices
+and on shared machines, and a single theme keeps contrast predictable and the
+stylesheet half the size.
+
+| Token | Value | Used for |
+|---|---|---|
+| `--jade-600` | `#0E7F76` | Primary actions, active navigation, brand |
+| `--jade-800` | `#0A4F4B` | Gradient depth, emphasis |
+| `--amber-500` | `#F59E0B` | Accent — counts, badges, anything awaiting attention |
+| `--violet-600` | `#4F46E5` | Informational states |
+| `--rose-600` | `#E11D48` | Destructive and error states |
+| `--ink-*` | cool slate ramp | Text and surfaces |
+| `--canvas` | `#F2F5FA` | Page background |
+
+Jade rather than the previous red. Red is the universal signal for *error*, so
+using it as the brand of a payroll system meant the interface looked alarmed at
+rest and had nothing left to say when something was genuinely wrong. Amber
+carries attention states; rose is reserved for destructive actions.
+
+The palette extends to generated documents and email: payslips, payroll exports
+and every template use the same jade, so a PDF looks like the system that
+produced it.
+
+**Layout.** The sidebar is a detached rounded card rather than an edge-to-edge
+column, which keeps the page feeling like a set of surfaces instead of panels.
+Each dashboard opens with a gradient hero carrying one headline figure, then
+stat tiles with a tinted icon chip, then content cards.
+
+**Row actions** are tinted rather than filled, and fill in on hover. Three solid
+buttons on every row of a long table shouts, and makes it hard to see which
+action is consequential.
+
+**Wide tables** scroll horizontally with edge shadows painted via
+`background-attachment`, so a clipped column reads as "there is more" rather
+than as a broken layout — and it needs no script.
+
 ### The `hidden` attribute
 
 `[hidden] { display: none !important; }` is set deliberately. The attribute is

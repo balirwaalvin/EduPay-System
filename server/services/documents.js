@@ -8,10 +8,14 @@
 const PDFDocument = require('pdfkit');
 const ExcelJS = require('exceljs');
 
-const BRAND = '#DC2626';
-const INK = '#111827';
-const MUTED = '#6B7280';
-const RULE = '#E5E7EB';
+// Matches the interface palette, so a payslip looks like the system that
+// produced it. Jade rather than red: red reads as an error state.
+const BRAND = '#0E7F76';
+const BRAND_DEEP = '#0A4F4B';
+const BRAND_TINT = '#EDFAF8';
+const INK = '#17233A';
+const MUTED = '#697389';
+const RULE = '#E1E7F1';
 
 const MONTHS = ['', 'January', 'February', 'March', 'April', 'May', 'June',
     'July', 'August', 'September', 'October', 'November', 'December'];
@@ -150,9 +154,9 @@ function streamPayslipPdf(res, item, config = {}) {
 
     // Net pay panel
     y += 4;
-    doc.roundedRect(left, y, contentWidth, 42, 6).fill('#FEF2F2');
+    doc.roundedRect(left, y, contentWidth, 42, 6).fill(BRAND_TINT);
     doc.font('Helvetica-Bold').fontSize(11).fillColor(INK).text('NET PAY', left + 14, y + 15);
-    doc.font('Helvetica-Bold').fontSize(16).fillColor(BRAND)
+    doc.font('Helvetica-Bold').fontSize(16).fillColor(BRAND_DEEP)
         .text(money(item.netSalary, currency), amountX - 40, y + 12, { width: 190, align: 'right' });
     y += 58;
 
@@ -283,10 +287,10 @@ async function streamPayrollExcel(res, payrollRun, items, config = {}) {
 
     const headerRow = sheet.addRow(headers);
     headerRow.eachCell(cell => {
-        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDC2626' } };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0E7F76' } };
         cell.font = { color: { argb: 'FFFFFFFF' }, bold: true, size: 10 };
         cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
-        cell.border = { bottom: { style: 'thin', color: { argb: 'FFB91C1C' } } };
+        cell.border = { bottom: { style: 'thin', color: { argb: 'FF0A4F4B' } } };
     });
 
     items.forEach((item, i) => {

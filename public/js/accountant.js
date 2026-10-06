@@ -255,6 +255,7 @@ async function loadStats() {
         const stats = await apiRequest('/accountant/stats');
 
         document.getElementById('statTeachers').textContent = stats.totalTeachers;
+        setText('heroPending', stats.pendingPayrolls);
         document.getElementById('statHalted').textContent = stats.haltedTeachers
             ? `${stats.haltedTeachers} paused`
             : 'None paused';

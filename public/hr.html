@@ -87,28 +87,45 @@
 
         <!-- Dashboard -->
         <section id="dashboard" class="page-section">
+          <div class="hero">
+            <div class="hero-inner">
+              <div>
+                <p class="hero-eyebrow">Human resources</p>
+                <h2>People and approvals</h2>
+                <p>Teachers, salary structures, and the leave, advance and payroll decisions that only HR can make.</p>
+                <div class="hero-chips">
+                <span class="hero-chip"><span aria-hidden="true">✅</span> Approval authority</span>
+                <span class="hero-chip"><span aria-hidden="true">👩‍🏫</span> Teacher records</span>
+                </div>
+              </div>
+              <div class="hero-aside">
+                <p class="hero-figure" id="heroTeachers">—</p>
+                <p class="hero-figure-label">active teachers</p>
+              </div>
+            </div>
+          </div>
           <div class="stats-grid">
-            <div class="stat-card">
+            <div class="stat-card" data-icon="👩‍🏫">
               <p class="stat-label">Active teachers</p>
               <p class="stat-value" id="statTeachers">—</p>
               <p class="stat-hint" id="statHalted"></p>
             </div>
-            <div class="stat-card accent-warning">
+            <div class="stat-card accent-warning" data-icon="✅">
               <p class="stat-label">Payroll to approve</p>
               <p class="stat-value" id="statAwaiting">—</p>
               <p class="stat-hint">Processed, awaiting you</p>
             </div>
-            <div class="stat-card accent-info">
+            <div class="stat-card accent-info" data-icon="🗓">
               <p class="stat-label">Leave requests</p>
               <p class="stat-value" id="statLeave">—</p>
               <p class="stat-hint">Awaiting a decision</p>
             </div>
-            <div class="stat-card accent-info">
+            <div class="stat-card accent-info" data-icon="💵">
               <p class="stat-label">Advance requests</p>
               <p class="stat-value" id="statAdvances">—</p>
               <p class="stat-hint">Awaiting a decision</p>
             </div>
-            <div class="stat-card accent-warning">
+            <div class="stat-card accent-warning" data-icon="✉">
               <p class="stat-label">Not yet activated</p>
               <p class="stat-value" id="statPendingActivation">—</p>
               <p class="stat-hint">Teachers who have not set a password</p>

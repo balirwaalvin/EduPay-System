@@ -38,14 +38,14 @@ function esc(value) {
 }
 
 function layout(title, bodyHtml) {
-    return `<!doctype html><html><body style="margin:0;padding:24px;background:#f5f6f8;font-family:Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#1f2937;">
-  <div style="max-width:560px;margin:0 auto;background:#fff;border-radius:10px;overflow:hidden;border:1px solid #e5e7eb;">
-    <div style="background:#DC2626;padding:20px 24px;">
+    return `<!doctype html><html><body style="margin:0;padding:24px;background:#F2F5FA;font-family:Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#17233A;">
+  <div style="max-width:560px;margin:0 auto;background:#fff;border-radius:10px;overflow:hidden;border:1px solid #E1E7F1;">
+    <div style="background:#0E7F76;padding:20px 24px;">
       <span style="color:#fff;font-size:20px;font-weight:700;letter-spacing:-.2px;">EduPay</span>
-      <div style="color:#fecaca;font-size:12px;margin-top:2px;">${esc(title)}</div>
+      <div style="color:#A6E6DD;font-size:12px;margin-top:2px;">${esc(title)}</div>
     </div>
     <div style="padding:24px;font-size:14px;line-height:1.6;">${bodyHtml}</div>
-    <div style="padding:16px 24px;border-top:1px solid #f3f4f6;color:#9ca3af;font-size:11px;">
+    <div style="padding:16px 24px;border-top:1px solid #EFF3F9;color:#697389;font-size:11px;">
       This is an automated message from the EduPay payroll system. Please do not reply.
     </div>
   </div>
@@ -68,11 +68,11 @@ async function sendPasswordSetupEmail({ toEmail, fullName, setupLink, expiryHour
         html: layout('Account setup', `
       <p>Hello ${esc(fullName)},</p>
       <p>Your EduPay account has been created. Choose a password to activate it.</p>
-      <p style="margin:24px 0;"><a href="${esc(setupLink)}" style="background:#DC2626;color:#fff;text-decoration:none;padding:11px 20px;border-radius:7px;display:inline-block;font-weight:600;">Set my password</a></p>
-      <p style="color:#6b7280;font-size:12px;">This link expires in ${expiryHours} hours and can be used once.
+      <p style="margin:24px 0;"><a href="${esc(setupLink)}" style="background:#0E7F76;color:#fff;text-decoration:none;padding:11px 20px;border-radius:7px;display:inline-block;font-weight:600;">Set my password</a></p>
+      <p style="color:#697389;font-size:12px;">This link expires in ${expiryHours} hours and can be used once.
       If the button does not work, paste this address into your browser:<br>
       <span style="word-break:break-all;">${esc(setupLink)}</span></p>
-      <p style="color:#6b7280;font-size:12px;">If you did not expect this email, contact your school administrator.</p>`)
+      <p style="color:#697389;font-size:12px;">If you did not expect this email, contact your school administrator.</p>`)
     });
 }
 
@@ -87,9 +87,9 @@ async function sendPasswordResetEmail({ toEmail, fullName, resetLink, expiryMinu
         html: layout('Password reset', `
       <p>Hello ${esc(fullName)},</p>
       <p>A password reset was requested for your EduPay account.</p>
-      <p style="margin:24px 0;"><a href="${esc(resetLink)}" style="background:#DC2626;color:#fff;text-decoration:none;padding:11px 20px;border-radius:7px;display:inline-block;font-weight:600;">Choose a new password</a></p>
-      <p style="color:#6b7280;font-size:12px;">This link expires in ${expiryMinutes} minutes and can be used once.</p>
-      <p style="color:#6b7280;font-size:12px;">If you did not request this, no action is needed — your password has not changed.</p>`)
+      <p style="margin:24px 0;"><a href="${esc(resetLink)}" style="background:#0E7F76;color:#fff;text-decoration:none;padding:11px 20px;border-radius:7px;display:inline-block;font-weight:600;">Choose a new password</a></p>
+      <p style="color:#697389;font-size:12px;">This link expires in ${expiryMinutes} minutes and can be used once.</p>
+      <p style="color:#697389;font-size:12px;">If you did not request this, no action is needed — your password has not changed.</p>`)
     });
 }
 
@@ -103,9 +103,9 @@ async function sendMfaOtpEmail({ toEmail, fullName, otpCode, expiryMinutes = 10 
         html: layout('Login verification', `
       <p>Hello ${esc(fullName)},</p>
       <p>Use this code to finish signing in:</p>
-      <p style="margin:20px 0;font-size:30px;font-weight:700;letter-spacing:7px;color:#DC2626;">${esc(otpCode)}</p>
-      <p style="color:#6b7280;font-size:12px;">This code expires in ${expiryMinutes} minutes.</p>
-      <p style="color:#6b7280;font-size:12px;">If you did not try to sign in, change your password and contact your administrator immediately.</p>`)
+      <p style="margin:20px 0;font-size:30px;font-weight:700;letter-spacing:7px;color:#0B655F;">${esc(otpCode)}</p>
+      <p style="color:#697389;font-size:12px;">This code expires in ${expiryMinutes} minutes.</p>
+      <p style="color:#697389;font-size:12px;">If you did not try to sign in, change your password and contact your administrator immediately.</p>`)
     });
 }
 
@@ -120,11 +120,11 @@ async function sendTemporaryCredentialsEmail({ toEmail, fullName, username, temp
       <p>Hello ${esc(fullName)},</p>
       <p>An EduPay account has been created for you.</p>
       <table style="margin:16px 0;font-size:14px;border-collapse:collapse;">
-        <tr><td style="padding:4px 16px 4px 0;color:#6b7280;">Username</td><td style="font-weight:600;">${esc(username)}</td></tr>
-        <tr><td style="padding:4px 16px 4px 0;color:#6b7280;">Temporary password</td><td style="font-weight:600;font-family:monospace;">${esc(temporaryPassword)}</td></tr>
+        <tr><td style="padding:4px 16px 4px 0;color:#697389;">Username</td><td style="font-weight:600;">${esc(username)}</td></tr>
+        <tr><td style="padding:4px 16px 4px 0;color:#697389;">Temporary password</td><td style="font-weight:600;font-family:monospace;">${esc(temporaryPassword)}</td></tr>
       </table>
-      <p><a href="${esc(loginUrl)}" style="background:#DC2626;color:#fff;text-decoration:none;padding:11px 20px;border-radius:7px;display:inline-block;font-weight:600;">Sign in</a></p>
-      <p style="color:#6b7280;font-size:12px;">You will be asked to choose a new password the first time you sign in.</p>`)
+      <p><a href="${esc(loginUrl)}" style="background:#0E7F76;color:#fff;text-decoration:none;padding:11px 20px;border-radius:7px;display:inline-block;font-weight:600;">Sign in</a></p>
+      <p style="color:#697389;font-size:12px;">You will be asked to choose a new password the first time you sign in.</p>`)
     });
 }
 
