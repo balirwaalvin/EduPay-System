@@ -354,30 +354,73 @@ administrators for every other operation.
 
 No framework and no build step. Three ideas carry most of the weight.
 
-### Design system
+### Brand colours
 
-Light mode only, deliberately: this is a finance product used in bright offices
-and on shared machines, and a single theme keeps contrast predictable and the
-stylesheet half the size.
+EduPay has **two** brand colours. Everything else is a neutral or a status hue;
+nothing else is "the brand".
 
-| Token | Value | Used for |
+| | Value | Role |
 |---|---|---|
-| `--jade-600` | `#0E7F76` | Primary actions, active navigation, brand |
-| `--jade-800` | `#0A4F4B` | Gradient depth, emphasis |
-| `--amber-500` | `#F59E0B` | Accent — counts, badges, anything awaiting attention |
-| `--violet-600` | `#4F46E5` | Informational states |
-| `--rose-600` | `#E11D48` | Destructive and error states |
+| **Primary — jade** | `#0E7F76` | The system's voice: primary actions, active navigation, brand surfaces, the logo tile |
+| **Secondary — amber** | `#F59E0B` | Attention: counts waiting on someone, the net-pay rule on a payslip, secondary calls to action, the middle arm of the mark |
+
+Jade rather than the previous red. Red is the universal signal for *error*, so a
+red brand left the interface looking alarmed at rest, with nothing in reserve for
+when something was genuinely wrong.
+
+Each is a full ramp — `--primary-50` … `--primary-900`, `--secondary-50` …
+`--secondary-700` — with shorthands components use instead of picking a step:
+
+```css
+--primary        --primary-deep   --primary-tint   --primary-line
+--secondary      --secondary-deep --secondary-tint --secondary-line
+```
+
+Status hues are deliberately neither brand colour, so a brand surface is never
+mistaken for a state — with one exception: **success is primary**. In a payroll
+system "approved" and "paid" are the good case, and the brand should carry it.
+
+Warning is orange rather than amber for the same reason. It began as the deep end
+of the secondary ramp, which meant a cautionary control and a secondary-brand
+control rendered in the *same colour* — plainly wrong the moment **Deactivate**
+and **Resend link** appeared in one table row. A status hue must not be a brand
+hue.
+
+| Token | Value | Role |
+|---|---|---|
+| `--info` | `#4F46E5` | Informational |
+| `--danger` | `#E11D48` | Destructive and error |
+| `--warning` | `#C2410C` | Caution — its own orange, **not** the secondary ramp |
 | `--ink-*` | cool slate ramp | Text and surfaces |
 | `--canvas` | `#F2F5FA` | Page background |
 
-Jade rather than the previous red. Red is the universal signal for *error*, so
-using it as the brand of a payroll system meant the interface looked alarmed at
-rest and had nothing left to say when something was genuinely wrong. Amber
-carries attention states; rose is reserved for destructive actions.
+#### Where the secondary actually appears
 
-The palette extends to generated documents and email: payslips, payroll exports
-and every template use the same jade, so a PDF looks like the system that
-produced it.
+A secondary colour that only exists as a token is not implemented. It carries:
+
+- `.btn-accent` and `.btn-accent-soft` — the second-most-wanted action on a
+  screen, where a neutral button is too quiet and a second primary would compete
+  with the real call to action. **Resend link** uses it: it unblocks someone who
+  cannot sign in
+- `.badge-accent`, and `.stat-card.accent-secondary`
+- The notification count and the navigation badges — the things waiting on you
+- The rule down the edge of the net-pay panel on every payslip
+
+#### Retheming
+
+Replace the two ramps in `:root` and the interface follows; no component
+hardcodes a brand hex. Four places sit outside CSS because they cannot read a
+custom property, and must be changed with it:
+
+| File | Why |
+|---|---|
+| `server/services/brand.js` | PDFs, Excel and email are rendered server-side |
+| `public/logo.svg`, `public/favicon.svg` | Standalone files |
+| `public/site.webmanifest` | JSON |
+| `<meta name="theme-color">` in each page | HTML meta takes no variable |
+
+`brand.js` is the single source for everything the server draws, so payslips,
+payroll exports and email all match the interface rather than drifting apart.
 
 **The mark** is `public/logo.svg`: an E built from a stem and three arms, the
 short middle one amber. The stem is load-bearing — three bars alone read as a

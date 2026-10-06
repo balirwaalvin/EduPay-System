@@ -64,7 +64,7 @@ function buildTables() {
             <button type="button" class="btn btn-sm btn-secondary" data-edit="${user.id}">Edit</button>
             <button type="button" class="btn btn-sm btn-secondary" data-reset="${user.id}">Reset password</button>
             ${user.activationPending
-                ? raw(html`<button type="button" class="btn btn-sm btn-secondary" data-resend="${user.id}">Resend link</button>`)
+                ? raw(html`<button type="button" class="btn btn-sm btn-accent-soft" data-resend="${user.id}">Resend link</button>`)
                 : raw('')}
             <button type="button" class="btn btn-sm btn-secondary" data-mfa="${user.id}"
               data-mfa-state="${user.mfaEnabled ? 'on' : 'off'}">

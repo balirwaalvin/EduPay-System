@@ -64,7 +64,7 @@ function buildTables() {
           <div class="action-btns">
             <button type="button" class="btn btn-sm btn-secondary" data-edit="${teacher.id}">Edit</button>
             ${teacher.activationPending
-                ? raw(html`<button type="button" class="btn btn-sm btn-secondary" data-resend="${teacher.id}">Resend link</button>`)
+                ? raw(html`<button type="button" class="btn btn-sm btn-accent-soft" data-resend="${teacher.id}">Resend link</button>`)
                 : raw('')}
             ${teacher.isActive === false
                 ? raw(html`<button type="button" class="btn btn-sm btn-success" data-reactivate="${teacher.id}">Reactivate</button>`)
