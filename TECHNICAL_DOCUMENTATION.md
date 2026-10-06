@@ -478,6 +478,57 @@ action is consequential.
 `background-attachment`, so a clipped column reads as "there is more" rather
 than as a broken layout — and it needs no script.
 
+### Stat tiles are coloured by meaning
+
+A tile's colour states what kind of figure it is, so a dashboard can be scanned
+before it is read. There are six, and each has exactly one job:
+
+| Class | Hue | Means | Example |
+|---|---|---|---|
+| *(none)* | jade | The headline figure, money that moved, the healthy state | Total paid out |
+| `accent-pending` | amber | Waiting on a person to decide | Payroll to approve |
+| `accent-attention` | orange | Something is broken and needs fixing | Not yet activated |
+| `accent-info` | violet | A plain count, no action implied | Accountants |
+| `accent-danger` | rose | Failed, rejected, overdue | — |
+| `accent-neutral` | grey | A historical total carrying no status | Payroll runs |
+
+Each accent sets four custom properties and the base `.stat-card` rule consumes
+them:
+
+```css
+.stat-card.accent-pending {
+  --card-tint: var(--secondary-50);   /* card background */
+  --card-line: var(--secondary-100);  /* border          */
+  --card-chip: var(--secondary-100);  /* icon chip       */
+  --card-ink:  var(--secondary-700);  /* icon + figure   */
+}
+```
+
+So adding an accent is four lines, and no accent can be half-applied — the
+background, border, chip, figure and hover bar cannot drift apart, because they
+all derive from the same four values.
+
+**Only the chip and the figure take the hue.** Labels and hints stay neutral;
+colouring those too turns the tile into a block of colour and costs more
+legibility than it buys meaning.
+
+Three constraints worth keeping:
+
+- **`.stat-label` and `.stat-hint` use `--ink-600`, not `--text-muted`.** The
+  muted grey was chosen against white and measures only 4.2:1 on the tints —
+  below AA. `--ink-600` measures at worst 6.5:1. If you add a tint, re-check it.
+- **Every accent clears AA on both text roles** (figure and label). The figures
+  run 4.8–11.2:1.
+- **`accent-attention` is the only accent at the `100` tint rather than `50`.**
+  At `50` its background sat 14 perceptual units from the amber of
+  `accent-pending` — indistinguishable — and those two must never be confused:
+  one means somebody has yet to decide, the other means something is broken. At
+  `100` the separation is 67. Its figure uses `--orange-800` because `700` does
+  not clear AA on the deeper tint.
+
+`accent-success` and `accent-warning` are kept as aliases of the jade default
+and of `accent-attention`, so older markup still renders correctly.
+
 ### Scrollbars, and why the two engines are handled separately
 
 The scrollbar is chrome people look at all day, so it carries the brand: a jade
@@ -510,6 +561,39 @@ Three treatments: the page scrollbar sits on the canvas so it is a step darker;
 the sidebar's stays invisible until the sidebar is hovered, because a scrollbar
 parked beside navigation is noise; a table's horizontal bar keeps a visible
 track, because there it is also the signal that more columns exist.
+
+### Browser-drawn controls, and dropdowns
+
+Some of the interface is drawn by the browser rather than by this stylesheet:
+`<select>` popups, date pickers, checkboxes, radios, the scrollbar gutter. Three
+things keep those on-brand.
+
+**`color-scheme: light`.** The dashboards previously sent
+`<meta name="color-scheme" content="dark light">`, which tells the browser the
+page supports dark mode. On a dark-mode OS it then drew every one of those
+controls dark — a black dropdown on a white page. EduPay is a light-mode
+product, so all eight pages declare `light`, and `:root` declares it too, so a
+page added without the meta still behaves.
+
+**`accent-color: var(--primary)`** on `:root`. One line; it is what turns
+checkboxes, radios, range and progress from the browser's blue to jade.
+
+**The dropdown list** is the hard one, because a `<select>`'s popup is not part
+of the page. There are two layers:
+
+- *Fallback, everywhere:* `option` and `option:checked` colours, which most
+  platforms honour, on a popup that `color-scheme` has already made light.
+- *`appearance: base-select`:* replaces the browser-drawn popup with a real
+  element the page can style — so `::picker(select)` gets the same surface,
+  border, radius and shadow as every other floating panel, options get the jade
+  tint on hover, focus and selection, `::checkmark` becomes the brand's check
+  icon, and `select:open::picker-icon` flips the chevron.
+
+The whole second layer sits behind `@supports (appearance: base-select)`. Where
+it is unsupported the block is skipped and the fallback shows — so this degrades
+rather than breaks. Note that `base-select` discards the control's own
+appearance, which is why the field is redrawn inside that block and the chevron
+moves from a `background-image` to `::picker-icon`.
 
 ### Collapsing the sidebar
 

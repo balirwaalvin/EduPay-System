@@ -100,6 +100,7 @@
   --orange-500: #F97316;
   --orange-600: #EA580C;
   --orange-700: #C2410C;
+  --orange-800: #9A3412;
 
   /* --- Neutrals: cool slate -------------------------------------------- */
   --ink-900: #0C1522;
@@ -177,6 +178,19 @@
   /* Scrollbar geometry, so the gutter can be reasoned about in one place. */
   --scrollbar-size: 11px;
   --scrollbar-inset: 3px;
+
+  /* --- Native control rendering -----------------------------------------
+     EduPay is a light-mode product. Without this, a browser on a dark-mode OS
+     renders the parts it draws itself — <select> popups, date pickers, the
+     scrollbar gutter — in dark, against our light page. Each page also carries
+     <meta name="color-scheme" content="light"> so this is settled before the
+     stylesheet has even loaded; this declaration is what keeps it true if a
+     page is ever added without the meta. */
+  color-scheme: light;
+
+  /* Checkboxes, radios, range and progress are drawn by the browser, and
+     default to its own blue. This is the one line that makes them jade. */
+  accent-color: var(--primary);
 }
 
 /* ==========================================================================
@@ -1506,10 +1520,31 @@ body.nav-collapsed .sidebar-collapse .icon {
   margin-bottom: 20px;
 }
 
+/* --- Stat tiles, coloured by meaning -------------------------------------
+
+   A tile's colour says what kind of figure it is, so a dashboard can be read
+   before it is read: amber means someone has to decide something, orange means
+   something is broken, violet is just a count, jade is money or the healthy
+   state.
+
+   Each accent sets four tokens and the base rule consumes them. Adding an
+   accent is therefore four lines, and no accent can be half-applied — the
+   background, border, chip and figure cannot drift apart because they all
+   derive from the same four values.
+
+   Only the chip and the figure take the hue. Labels and hints stay neutral:
+   colouring those as well turns a tile into a block of colour and costs more
+   legibility than it buys meaning. */
+
 .stat-card {
+  --card-tint: var(--primary-50);
+  --card-line: var(--primary-100);
+  --card-chip: var(--primary-100);
+  --card-ink: var(--primary-700);
+
   position: relative;
-  background: var(--surface);
-  border: 1px solid var(--border);
+  background: var(--card-tint);
+  border: 1px solid var(--card-line);
   border-radius: var(--r-lg);
   padding: 18px 19px;
   box-shadow: var(--shadow-sm);
@@ -1517,12 +1552,77 @@ body.nav-collapsed .sidebar-collapse .icon {
   overflow: hidden;
 }
 
-.stat-card:hover {
-  box-shadow: var(--shadow);
-  transform: translateY(-1px);
+/* Waiting on a person: approvals, requests, decisions queued behind someone.
+   The secondary brand colour, the same amber as the navigation's pending
+   badge, so the two agree about what "waiting" looks like. */
+.stat-card.accent-pending {
+  --card-tint: var(--secondary-50);
+  --card-line: var(--secondary-100);
+  --card-chip: var(--secondary-100);
+  --card-ink: var(--secondary-700);
 }
 
-/* The icon chip, tinted per accent. Filled in by icons.js. */
+/* Something is wrong and a person must fix it — an account that cannot sign
+   in, a payment that failed to send. Distinct from pending: nobody is waiting
+   their turn here, something is broken. */
+/* Deliberately the loudest tile in the set, and the only one that steps up to
+   the 100 tint. At the 50 step its background measured 14 units from the amber
+   used for "pending" — the same colour, to the eye — and these two must never
+   be confused: one means someone has yet to decide, the other means something
+   is broken. At 100 the separation is 67. The figure moves to --orange-800
+   because 700 does not clear AA on the deeper tint. */
+.stat-card.accent-attention {
+  --card-tint: var(--orange-100);
+  --card-line: var(--orange-200);
+  --card-chip: var(--orange-200);
+  --card-ink: var(--orange-800);
+}
+
+/* A plain count with no action implied: how many accountants there are, how
+   many leave days remain. */
+.stat-card.accent-info {
+  --card-tint: var(--violet-50);
+  --card-line: var(--violet-100);
+  --card-chip: var(--violet-100);
+  --card-ink: var(--violet-700);
+}
+
+/* Failed, rejected, overdue. */
+.stat-card.accent-danger {
+  --card-tint: var(--rose-50);
+  --card-line: var(--rose-100);
+  --card-chip: var(--rose-100);
+  --card-ink: var(--rose-700);
+}
+
+/* A figure that carries no status at all — a historical total. Deliberately
+   grey: not everything deserves a colour, and spending one here would weaken
+   the ones that mean something. */
+.stat-card.accent-neutral {
+  --card-tint: var(--ink-50);
+  --card-line: var(--ink-200);
+  --card-chip: var(--ink-100);
+  --card-ink: var(--ink-700);
+}
+
+/* Older names kept working: `success` was always the primary jade, and
+   `warning` was used for both meanings before they were separated. `warning`
+   maps to attention, which is what it looked like. */
+.stat-card.accent-success {
+  --card-tint: var(--primary-50);
+  --card-line: var(--primary-100);
+  --card-chip: var(--primary-100);
+  --card-ink: var(--primary-700);
+}
+
+.stat-card.accent-warning {
+  --card-tint: var(--orange-100);
+  --card-line: var(--orange-200);
+  --card-chip: var(--orange-200);
+  --card-ink: var(--orange-800);
+}
+
+/* The icon chip. Filled in by icons.js. */
 .stat-icon {
   display: grid;
   place-items: center;
@@ -1530,41 +1630,18 @@ body.nav-collapsed .sidebar-collapse .icon {
   height: 38px;
   margin-bottom: 14px;
   border-radius: var(--r-sm);
-  background: var(--primary-tint);
-  color: var(--primary-deep);
+  background: var(--card-chip);
+  color: var(--card-ink);
 }
 
-.stat-card.accent-success .stat-icon {
-  background: var(--primary-tint);
-  color: var(--primary-700);
-}
-
-.stat-card.accent-warning .stat-icon {
-  background: var(--warning-tint);
-  color: var(--warning);
-}
-
-.stat-card.accent-info .stat-icon {
-  background: var(--violet-50);
-  color: var(--violet-600);
-}
-
-.stat-card.accent-danger .stat-icon {
-  background: var(--rose-50);
-  color: var(--rose-600);
-}
-
-/* The secondary brand accent, for a figure that is waiting on someone. */
-.stat-card.accent-secondary .stat-icon {
-  background: var(--secondary-tint);
-  color: var(--secondary-700);
-}
-
+/* A step darker than --text-muted, which was chosen against white. On the
+   tinted cards it measures 4.2:1 — below AA — where this measures 7.0:1 on the
+   worst of the six tints. */
 .stat-label {
   font-size: .715rem;
   text-transform: uppercase;
   letter-spacing: .1em;
-  color: var(--text-muted);
+  color: var(--ink-600);
   font-weight: 750;
   margin: 0 0 6px;
 }
@@ -1575,13 +1652,13 @@ body.nav-collapsed .sidebar-collapse .icon {
   letter-spacing: -.032em;
   margin: 0;
   overflow-wrap: anywhere;
-  color: var(--ink-900);
+  color: var(--card-ink, var(--ink-900));
   line-height: 1.12;
 }
 
 .stat-hint {
   font-size: .775rem;
-  color: var(--text-muted);
+  color: var(--ink-600);
   margin: 7px 0 0;
 }
 
@@ -1950,6 +2027,144 @@ select {
   padding-right: 34px;
 }
 
+/* --- The dropdown list --------------------------------------------------
+
+   A <select>'s popup is drawn by the browser, not the page, so for years the
+   only lever was `color-scheme` plus whatever `option` colours the platform
+   honoured. That fallback still matters and comes first.
+
+   `appearance: base-select` replaces the browser-drawn popup with a real
+   element the page can style. It is progressive: where it is unsupported the
+   rules below are skipped entirely and the native popup — now light, with
+   branded options — is what shows. */
+
+option {
+  background-color: var(--surface);
+  color: var(--text);
+}
+
+option:checked {
+  background-color: var(--primary-tint);
+  color: var(--primary-800);
+}
+
+@supports (appearance: base-select) {
+
+  select,
+  ::picker(select) {
+    appearance: base-select;
+  }
+
+  /* base-select discards the control's own appearance, so the field has to be
+     redrawn — including the chevron, which is now a real pseudo-element rather
+     than a background image. */
+  select {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    text-align: left;
+    background-image: none;
+    padding-right: 13px;
+  }
+
+  select::picker-icon {
+    content: "";
+    width: 12px;
+    height: 8px;
+    flex: none;
+    background: currentColor;
+    color: var(--ink-400);
+    /* The same chevron the native field used, as a mask so it takes colour. */
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='black' stroke-width='1.8' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
+    transition: transform var(--t), color var(--t);
+  }
+
+  select:hover::picker-icon {
+    color: var(--primary);
+  }
+
+  /* The chevron points the way the list will go. */
+  select:open::picker-icon {
+    transform: rotate(180deg);
+    color: var(--primary);
+  }
+
+  select:open {
+    border-color: var(--primary-500);
+    box-shadow: 0 0 0 3.5px var(--primary-100);
+  }
+
+  /* The popup itself: the same surface, border, radius and shadow as every
+     other floating panel in the app, so it belongs to the system. */
+  ::picker(select) {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    box-shadow: var(--shadow-lg);
+    padding: 6px;
+    margin-top: 6px;
+    max-height: 320px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  option {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 9px 11px;
+    border-radius: var(--r-xs);
+    font-size: .9rem;
+    color: var(--text);
+    background-color: transparent;
+    cursor: pointer;
+    transition: background-color var(--t-fast), color var(--t-fast);
+  }
+
+  /* Both states matter: pointer hover and keyboard arrowing are different
+     things, and arrowing through a list with no highlight is unusable. */
+  option:hover,
+  option:focus {
+    background-color: var(--primary-tint);
+    color: var(--primary-800);
+  }
+
+  option:checked {
+    background-color: var(--primary-tint);
+    color: var(--primary-800);
+    font-weight: 650;
+  }
+
+  /* The default tick is a platform glyph; this one is the brand's check icon
+     at the end of the row, so the chosen item reads without relying on tint
+     alone. */
+  option::checkmark {
+    content: "";
+    order: 1;
+    margin-left: auto;
+    width: 15px;
+    height: 15px;
+    flex: none;
+    background: currentColor;
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='m5 12.6 4.6 4.6L19 7.4' stroke='black' stroke-width='2.4' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
+  }
+
+  option:not(:checked)::checkmark {
+    visibility: hidden;
+  }
+
+  /* A disabled placeholder ("Select a month…") should not look choosable. */
+  option:disabled {
+    color: var(--ink-400);
+    cursor: not-allowed;
+  }
+
+  ::picker(select):popover-open {
+    animation: riseIn 160ms var(--ease-out);
+  }
+}
+
 .form-hint {
   font-size: .775rem;
   color: var(--text-muted);
@@ -1994,7 +2209,6 @@ select {
 .checkbox-row input[type="checkbox"] {
   width: auto;
   margin-top: 3px;
-  accent-color: var(--primary);
 }
 
 .checkbox-row label,
@@ -2793,7 +3007,7 @@ tbody tr[style*="--i"] {
 
 .stat-card:hover {
   transform: translateY(-3px);
-  border-color: var(--primary-line);
+  border-color: var(--card-ink);
 }
 
 .stat-card .stat-icon {
@@ -2804,14 +3018,15 @@ tbody tr[style*="--i"] {
   transform: scale(1.08) rotate(-4deg);
 }
 
-/* A jade wash that rises out of the bottom edge on hover, so the whole tile
-   responds and not just its shadow. */
+/* A bar in the tile's own colour rises out of its bottom edge on hover, so the
+   whole tile responds and not just its shadow. It draws from --card-ink, so it
+   is never a colour the tile does not already mean. */
 .stat-card::after {
   content: "";
   position: absolute;
   inset: auto 0 0 0;
   height: 3px;
-  background: linear-gradient(90deg, var(--primary), var(--secondary));
+  background: var(--card-ink);
   transform: scaleX(0);
   transform-origin: left;
   transition: transform var(--t-slow);
