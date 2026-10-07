@@ -53,15 +53,14 @@ suite('database constraints', () => {
         db = require('../server/db');
         const { migrate } = require('../server/migrate');
 
-        const hasSchema = Number(await db.scalar(
-            `SELECT count(*) AS count FROM information_schema.tables
-              WHERE table_schema = 'public' AND table_name = 'users'`
-        ));
-        if (!hasSchema) await migrate();
+        /* Always migrate: this used to run only against an empty database, so
+           once `users` existed no later migration was ever applied here. */
+        await migrate();
 
         await db.execute(`
             TRUNCATE payroll_versions, payroll_items, payroll, leave_requests, advance_requests,
                      notifications, audit_log, password_resets, teachers, accountants,
+                     user_avatars,
                      users, salary_structures, system_config, counters
             RESTART IDENTITY CASCADE
         `);

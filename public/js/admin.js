@@ -16,7 +16,7 @@ const AUDIT_ACTIONS = [
     'CREATE_SALARY_STRUCTURE', 'UPDATE_SALARY_STRUCTURE', 'DELETE_SALARY_STRUCTURE',
     'PROCESS_PAYROLL', 'APPROVE_PAYROLL', 'REJECT_PAYROLL', 'UPDATE_PAYMENT_STATUS',
     'MARK_PAYROLL_PAID', 'HALT_TEACHER_PAYROLL', 'RESUME_TEACHER_PAYROLL',
-    'DECIDE_LEAVE', 'DECIDE_ADVANCE', 'UPDATE_CONFIG', 'BACKUP_EXPORTED'
+    'DECIDE_LEAVE', 'DECIDE_ADVANCE', 'UPDATE_CONFIG', 'BACKUP_EXPORTED', 'UPDATE_AVATAR'
 ];
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -46,8 +46,14 @@ function buildTables() {
         renderRow: user => html`
       <tr>
         <td>
-          <span class="cell-primary">${user.fullName}</span>
-          <span class="cell-sub">${user.username}</span>
+          <button type="button" class="identity" data-profile="${user.id}">
+            <span class="identity-avatar" data-initials="${initials(user.fullName)}"
+              data-avatar-for="${user.hasAvatar ? user.id : ''}"></span>
+            <span class="identity-text">
+              <span class="cell-primary">${user.fullName}</span>
+              <span class="cell-sub">${user.username}</span>
+            </span>
+          </button>
         </td>
         <td>
           ${user.email || '—'}
@@ -109,6 +115,13 @@ function buildTables() {
     });
 
     document.getElementById('staffTableBody').addEventListener('click', handleStaffAction);
+
+    // The profile offers the same actions as the row, so it shares the handler.
+    document.getElementById('profileBody').addEventListener('click', handleStaffAction);
+
+    document.getElementById('staffTableBody').addEventListener('table:rendered',
+        (event) => fillAvatarThumbnails(event.target));
+    document.getElementById('profileBack').addEventListener('click', () => switchSection('staff'));
 }
 
 function roleBadge(role) {
@@ -121,6 +134,7 @@ function handleStaffAction(event) {
     const target = event.target;
     const get = (name) => target.closest(`[data-${name}]`)?.dataset[name];
 
+    const profile = get('profile');
     const edit = get('edit');
     const reset = get('reset');
     const resend = get('resend');
@@ -129,7 +143,8 @@ function handleStaffAction(event) {
     const reactivate = get('reactivate');
     const remove = get('delete');
 
-    if (edit) openStaffModal(edit);
+    if (profile) switchSection('staffProfile', profile);
+    else if (edit) openStaffModal(edit);
     else if (reset) resetPassword(reset);
     else if (resend) resendSetupLink(resend, target.closest('[data-resend]'));
     else if (mfaBtn) toggleMfa(mfaBtn.dataset.mfa, mfaBtn.dataset.mfaState !== 'on');
@@ -170,6 +185,7 @@ function wireForms() {
 
         if (section === 'mfa') { loadMfaActivity(); return; }
         if (section === 'staff') { loadStaff(); return; }
+        if (section === 'staffProfile') { loadStaffProfile(event.detail.param); return; }
 
         if (loaded.has(section)) return;
         loaded.add(section);
@@ -256,6 +272,298 @@ async function loadStaff() {
         showError(err, 'Could not load accounts.');
         staffTable.setData([]);
     }
+
+    // Every account action funnels through here, so this one line keeps an open
+    // profile in step with whatever just happened to it.
+    if (profileUserId && document.getElementById('staffProfile')?.classList.contains('active')) {
+        loadStaffProfile(profileUserId);
+    }
+}
+
+/* ==========================================================================
+   Staff profile
+
+   The list answers "who are the accounts"; this answers "who is this one".
+   Everything the row had no space for lives here — when the account was
+   created and by whom, when it last signed in, when its password last changed,
+   what it has been doing — alongside the same actions, so nothing has to be
+   done back on the list.
+   ========================================================================== */
+
+let profileUserId = null;
+
+/** The square the picture is stored at. Large enough for a retina 128px frame. */
+const AVATAR_SIZE = 512;
+
+/** Refused before the file is ever decoded; the resized result is far smaller. */
+const AVATAR_MAX_SOURCE_BYTES = 12 * 1024 * 1024;
+
+async function loadStaffProfile(userId) {
+    if (!userId) { switchSection('staff'); return; }
+
+    profileUserId = userId;
+    const body = document.getElementById('profileBody');
+    if (!body) return;
+
+    try {
+        renderStaffProfile(await apiRequest(`/admin/users/${encodeURIComponent(userId)}`));
+    } catch (err) {
+        showError(err, 'Could not load that account.');
+        body.innerHTML = html`
+      <div class="card"><div class="card-body">
+        <p class="empty-hint">That account could not be loaded. It may have been deleted.</p>
+      </div></div>`;
+    }
+}
+
+function renderStaffProfile(user) {
+    const body = document.getElementById('profileBody');
+    const pending = user.activationPending;
+
+    body.innerHTML = html`
+    <div class="profile-head card">
+      <div class="profile-identity">
+        <div class="profile-photo-frame">
+          ${user.avatar
+            ? raw(html`<img class="profile-photo" src="${user.avatar}" alt="Profile picture of ${user.fullName}">`)
+            : raw(html`<span class="profile-photo is-placeholder" aria-hidden="true">${initials(user.fullName)}</span>`)}
+        </div>
+        <div class="profile-headline">
+          <h2>${user.fullName}</h2>
+          <p class="profile-username">${user.username}</p>
+          <div class="chip-stack">
+            ${raw(roleBadge(user.role))}
+            ${raw(user.isActive ? badge('Approved', 'Active') : badge('Cancelled', 'Deactivated'))}
+            ${raw(user.mfaEnabled ? badge('Approved', '2FA on') : badge('Muted', '2FA off'))}
+            ${pending ? raw(badge('Pending', 'No password')) : raw('')}
+          </div>
+        </div>
+      </div>
+
+      <div class="profile-photo-actions">
+        <input type="file" id="avatarInput" accept="image/jpeg,image/png,image/webp" hidden>
+        <button type="button" class="btn btn-sm btn-primary" id="avatarPick">
+          ${user.avatar ? 'Replace photo' : 'Upload photo'}</button>
+        ${user.avatar
+          ? raw(html`<button type="button" class="btn btn-sm btn-secondary" id="avatarRemove">Remove</button>`)
+          : raw('')}
+        <p class="form-hint">JPEG, PNG or WebP. Squared and resized in your browser before it is sent.</p>
+      </div>
+    </div>
+
+    <div class="profile-columns">
+      <div class="card">
+        <div class="card-header"><h3>Details</h3></div>
+        <div class="card-body">
+          <dl class="detail-list">
+            <div><dt>Full name</dt><dd>${user.fullName}</dd></div>
+            <div><dt>Username</dt><dd>${user.username}</dd></div>
+            <div><dt>Role</dt><dd>${raw(roleBadge(user.role))}</dd></div>
+            <div><dt>Email</dt><dd>${user.email || '—'}</dd></div>
+            <div><dt>Phone</dt><dd>${user.phone || '—'}</dd></div>
+            <div><dt>Two-factor</dt><dd>${user.mfaEnabled ? `On, by ${user.mfaMethod || 'email'}` : 'Off'}</dd></div>
+            <div><dt>Status</dt><dd>${user.isActive ? 'Active' : `Deactivated ${formatDate(user.deactivatedAt)}`}</dd></div>
+            ${user.isActive ? raw('') : raw(html`<div><dt>Reason</dt><dd>${user.deactivationReason || '—'}</dd></div>`)}
+            <div><dt>Created</dt><dd>${formatDate(user.createdAt)}${user.createdByName ? ` by ${user.createdByName}` : ''}</dd></div>
+            <div><dt>Last sign-in</dt><dd>${user.lastLoginAt ? formatDateTime(user.lastLoginAt) : 'Never'}</dd></div>
+            <div><dt>Password set</dt><dd>${pending ? 'Not yet set' : (user.passwordChangedAt ? formatDateTime(user.passwordChangedAt) : '—')}</dd></div>
+          </dl>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h3>Actions</h3></div>
+        <div class="card-body profile-actions">
+          <button type="button" class="btn btn-secondary btn-block" data-edit="${user.id}">Edit details</button>
+          <button type="button" class="btn btn-secondary btn-block" data-reset="${user.id}">Reset password</button>
+          ${pending
+            ? raw(html`<button type="button" class="btn btn-accent-soft btn-block" data-resend="${user.id}">Resend setup link</button>`)
+            : raw('')}
+          <button type="button" class="btn btn-secondary btn-block" data-mfa="${user.id}"
+            data-mfa-state="${user.mfaEnabled ? 'on' : 'off'}">
+            ${user.mfaEnabled ? 'Disable two-factor' : 'Enable two-factor'}</button>
+          <div class="row-menu-sep"></div>
+          ${user.isActive
+            ? raw(html`<button type="button" class="btn btn-warning btn-block" data-deactivate="${user.id}">Deactivate account</button>`)
+            : raw(html`<button type="button" class="btn btn-success btn-block" data-reactivate="${user.id}">Reactivate account</button>`)}
+          <button type="button" class="btn btn-danger btn-block" data-delete="${user.id}">Delete account</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h3>Recent activity</h3>
+        <p class="card-subtitle">The last eight entries for this account</p>
+      </div>
+      <div class="card-body">
+        <div class="table-wrap">
+          <table>
+            <caption class="sr-only">Recent activity</caption>
+            <thead><tr>
+              <th scope="col">When</th><th scope="col">Action</th>
+              <th scope="col">Detail</th><th scope="col">From</th>
+            </tr></thead>
+            <tbody>
+              ${raw(user.recentActivity?.length
+                ? user.recentActivity.map(entry => html`
+                  <tr>
+                    <td>${formatDateTime(entry.createdAt)}</td>
+                    <td><span class="cell-primary">${humanise(entry.action).toLowerCase()}</span></td>
+                    <td class="wrap">${entry.details || '—'}</td>
+                    <td>${entry.ipAddress || '—'}</td>
+                  </tr>`).join('')
+                : emptyRow(4, 'Nothing recorded yet'))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>`;
+
+    hydrateIcons(body);
+    wireAvatarControls(user);
+}
+
+/* --- Thumbnails in the list --------------------------------------------- */
+
+/* Pictures cannot ride in the list response — 2000 accounts of base64 would be
+   a response measured in megabytes — so the rows say only whether one exists
+   and these are fetched after the fact. Cached by account and upload time, so
+   paging, sorting and searching do not re-fetch what is already in hand, and a
+   replaced picture still busts the entry. */
+const avatarCache = new Map();
+
+async function fillAvatarThumbnails(root = document) {
+    const slots = root.querySelectorAll('[data-avatar-for]:not([data-avatar-done])');
+
+    await Promise.all([...slots].map(async (slot) => {
+        const userId = slot.dataset.avatarFor;
+        slot.setAttribute('data-avatar-done', '');
+        if (!userId) return;                        // No picture: the initials stand.
+
+        try {
+            if (!avatarCache.has(userId)) {
+                const { avatar } = await apiRequest(`/admin/users/${encodeURIComponent(userId)}/avatar`);
+                avatarCache.set(userId, avatar);
+            }
+            const image = document.createElement('img');
+            image.src = avatarCache.get(userId);
+            image.alt = '';
+            slot.replaceChildren(image);
+            slot.classList.add('has-photo');
+        } catch {
+            /* Leave the initials in place; a missing thumbnail is not worth a
+               toast, and the row is still perfectly usable. */
+        }
+    }));
+}
+
+/* --- The picture -------------------------------------------------------- */
+
+function wireAvatarControls(user) {
+    const input = document.getElementById('avatarInput');
+    const pick = document.getElementById('avatarPick');
+    const remove = document.getElementById('avatarRemove');
+
+    pick?.addEventListener('click', () => input.click());
+
+    input?.addEventListener('change', async () => {
+        const file = input.files?.[0];
+        input.value = '';                       // So picking the same file again still fires.
+        if (!file) return;
+
+        pick.disabled = true;
+        const original = pick.textContent;
+        pick.textContent = 'Uploading…';
+
+        try {
+            const image = await squareImage(file);
+            await apiRequest(`/admin/users/${encodeURIComponent(user.id)}/avatar`, {
+                method: 'PUT',
+                body: { image }
+            });
+            avatarCache.delete(String(user.id));
+            showToast(`Profile picture set for ${user.fullName}.`);
+            loadStaffProfile(user.id);
+            loadStaff();
+        } catch (err) {
+            showError(err, 'That picture could not be uploaded.');
+            pick.disabled = false;
+            pick.textContent = original;
+        }
+    });
+
+    remove?.addEventListener('click', async () => {
+        const ok = await confirmAction({
+            title: 'Remove profile picture',
+            message: `Remove the profile picture for ${user.fullName}?`,
+            confirmLabel: 'Remove',
+            danger: true
+        });
+        if (!ok) return;
+
+        try {
+            await apiRequest(`/admin/users/${encodeURIComponent(user.id)}/avatar`, { method: 'DELETE' });
+            avatarCache.delete(String(user.id));
+            showToast('Profile picture removed.');
+            loadStaffProfile(user.id);
+            loadStaff();
+        } catch (err) {
+            showError(err, 'That picture could not be removed.');
+        }
+    });
+}
+
+/**
+ * Centre-crop a chosen file to a square and re-encode it as JPEG.
+ *
+ * Doing this in the browser keeps the upload small enough to travel as JSON,
+ * and re-encoding through a canvas drops every scrap of metadata the original
+ * carried — which for a photo off a phone includes the GPS coordinates of
+ * wherever it was taken. The server does not rely on any of this: it reads the
+ * type and dimensions back out of the bytes it receives.
+ */
+async function squareImage(file) {
+    if (!file.type.startsWith('image/')) {
+        throw new ApiError('That file is not an image.', 'NOT_AN_IMAGE', 400);
+    }
+    if (file.size > AVATAR_MAX_SOURCE_BYTES) {
+        throw new ApiError('That image is very large. Choose one under 12 MB.', 'TOO_LARGE', 400);
+    }
+
+    // `from-image` applies the EXIF orientation, so a portrait photo off a
+    // phone is not stored on its side.
+    let bitmap;
+    try {
+        bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
+    } catch {
+        throw new ApiError('That image could not be read. It may be damaged.', 'DECODE_FAILED', 400);
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = AVATAR_SIZE;
+    canvas.height = AVATAR_SIZE;
+    const ctx = canvas.getContext('2d');
+
+    // JPEG has no transparency, so anything see-through would turn black.
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, AVATAR_SIZE, AVATAR_SIZE);
+
+    // Cover: fill the square from the centre of the image, cropping the long side.
+    const side = Math.min(bitmap.width, bitmap.height);
+    ctx.drawImage(
+        bitmap,
+        (bitmap.width - side) / 2, (bitmap.height - side) / 2, side, side,
+        0, 0, AVATAR_SIZE, AVATAR_SIZE
+    );
+    bitmap.close?.();
+
+    // Step the quality down if a busy photo still comes out over the limit.
+    for (const quality of [0.85, 0.72, 0.6, 0.45]) {
+        const dataUrl = canvas.toDataURL('image/jpeg', quality);
+        if (dataUrl.length * 0.75 <= 262144) return dataUrl;
+    }
+    throw new ApiError('That image could not be compressed enough. Try a simpler picture.', 'TOO_LARGE', 400);
 }
 
 function openStaffModal(userId) {

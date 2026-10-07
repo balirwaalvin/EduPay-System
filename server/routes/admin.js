@@ -12,6 +12,7 @@ const accounts = require('../services/accounts');
 const configService = require('../services/config');
 const { logAudit, listAudit, listActions } = require('../services/audit');
 const notify = require('../services/notifications');
+const avatars = require('../services/avatars');
 
 router.use(authenticateToken, authorizeRoles('admin'), requirePasswordChanged);
 
@@ -32,13 +33,104 @@ const SAFE_USER_COLUMNS = `
 router.get('/users', asyncHandler(async (req, res) => {
     const role = req.query.role ? v.oneOf(req.query.role, ROLES, 'Role') : null;
 
-    res.json(await db.query(
+    const users = await db.query(
         `SELECT ${SAFE_USER_COLUMNS} FROM users
           WHERE ($1::text IS NULL OR role = $1)
           ORDER BY created_at DESC
           LIMIT 2000`,
         [role]
-    ));
+    );
+
+    /* A flag rather than the picture itself: 2000 rows each carrying a base64
+       image would be a response measured in megabytes. The profile view asks
+       for the one it needs. */
+    const withAvatars = await avatars.summaryFor(users.map(u => u.id));
+    for (const user of users) {
+        user.hasAvatar = withAvatars.has(String(user.id));
+        user.avatarUpdatedAt = withAvatars.get(String(user.id)) || null;
+    }
+
+    res.json(users);
+}));
+
+/**
+ * One account in full, for the profile view: everything the list shows, plus
+ * the fields it has no room for and the picture itself.
+ */
+router.get('/users/:id', asyncHandler(async (req, res) => {
+    const userId = v.num(req.params.id, 'User id', { integer: true, min: 1 });
+
+    const user = await db.queryOne(
+        `SELECT ${SAFE_USER_COLUMNS},
+                password_changed_at, last_logout_at, created_by, deactivated_by, reactivated_at,
+                (SELECT full_name FROM users c WHERE c.id = users.created_by)     AS created_by_name,
+                (SELECT full_name FROM users d WHERE d.id = users.deactivated_by) AS deactivated_by_name
+           FROM users WHERE id = $1`,
+        [userId]
+    );
+    if (!user) throw new HttpError(404, 'Account not found.', 'USER_NOT_FOUND');
+
+    user.avatar = await avatars.asDataUrl(userId);
+
+    // What this account has been doing, so the profile answers "is this person
+    // actually using it?" without a trip to the audit page.
+    user.recentActivity = await db.query(
+        `SELECT action, details, created_at, ip_address
+           FROM audit_log WHERE user_id = $1
+          ORDER BY created_at DESC LIMIT 8`,
+        [userId]
+    );
+
+    res.json(user);
+}));
+
+/**
+ * Upload or replace a profile picture.
+ *
+ * Administrator-only, which this router enforces for every route on it — see
+ * the `authorizeRoles('admin')` at the top. There is deliberately no route by
+ * which an account can set its own picture.
+ */
+router.put('/users/:id/avatar', asyncHandler(async (req, res) => {
+    const userId = v.num(req.params.id, 'User id', { integer: true, min: 1 });
+
+    const user = await db.queryOne('SELECT id, username, full_name FROM users WHERE id = $1', [userId]);
+    if (!user) throw new HttpError(404, 'Account not found.', 'USER_NOT_FOUND');
+
+    // Everything about the image is re-derived from its bytes in here.
+    const stored = await avatars.save(userId, req.body?.image, req.user.id);
+
+    logAudit(req.user, 'UPDATE_AVATAR',
+        `Set a profile picture for "${user.username}" (${stored.width}x${stored.height}, ${stored.byteSize} bytes)`,
+        req.ip);
+
+    res.json({
+        message: 'Profile picture updated.',
+        avatar: await avatars.asDataUrl(userId),
+        ...stored
+    });
+}));
+
+/** Just the picture, for the thumbnails in the account list. */
+router.get('/users/:id/avatar', asyncHandler(async (req, res) => {
+    const userId = v.num(req.params.id, 'User id', { integer: true, min: 1 });
+    const avatar = await avatars.asDataUrl(userId);
+    if (!avatar) throw new HttpError(404, 'That account has no profile picture.', 'AVATAR_NOT_FOUND');
+    res.json({ avatar });
+}));
+
+router.delete('/users/:id/avatar', asyncHandler(async (req, res) => {
+    const userId = v.num(req.params.id, 'User id', { integer: true, min: 1 });
+
+    const user = await db.queryOne('SELECT id, username FROM users WHERE id = $1', [userId]);
+    if (!user) throw new HttpError(404, 'Account not found.', 'USER_NOT_FOUND');
+
+    const removed = await avatars.remove(userId);
+    if (!removed) throw new HttpError(404, 'That account has no profile picture.', 'AVATAR_NOT_FOUND');
+
+    logAudit(req.user, 'UPDATE_AVATAR', `Removed the profile picture for "${user.username}"`, req.ip);
+
+    res.json({ message: 'Profile picture removed.' });
 }));
 
 router.get('/admins', asyncHandler(async (req, res) => {

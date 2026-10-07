@@ -2877,6 +2877,268 @@ td.cell-truncate .cell-sub {
    ========================================================================== */
 
 /* ==========================================================================
+   Staff profile
+
+   The account list answers "who are the accounts"; this answers "who is this
+   one". It is a section like any other rather than a separate page, so it
+   inherits the dashboard chrome, the hash routing and the entrance motion —
+   and the browser Back button works without anything being written for it.
+   ========================================================================== */
+
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 14px;
+  padding: 7px 13px 7px 9px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: .845rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--t);
+}
+
+.back-link:hover {
+  background: var(--primary-tint);
+  border-color: var(--primary-line);
+  color: var(--primary-deep);
+}
+
+.back-link:hover .icon {
+  transform: translateX(-2px);
+}
+
+.back-link .icon {
+  transition: transform var(--t);
+}
+
+/* --- The header card ---------------------------------------------------- */
+
+.profile-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 20px;
+  padding: 22px 24px;
+}
+
+.profile-identity {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  min-width: 0;
+}
+
+.profile-photo-frame {
+  flex: none;
+  width: 104px;
+  height: 104px;
+  border-radius: 50%;
+  padding: 3px;
+  background: linear-gradient(140deg, var(--primary-400), var(--primary-700));
+  box-shadow: var(--shadow-primary);
+}
+
+.profile-photo {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--surface);
+  /* A picture is uploaded square, but a replaced one mid-fetch should never
+     letterbox, so the cover above is kept rather than relying on the source. */
+}
+
+.profile-photo.is-placeholder {
+  background: var(--surface);
+  color: var(--primary-700);
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: -.02em;
+}
+
+.profile-headline {
+  min-width: 0;
+}
+
+.profile-headline h2 {
+  font-size: 1.44rem;
+  letter-spacing: -.028em;
+  margin: 0 0 2px;
+}
+
+.profile-username {
+  font-size: .9rem;
+  color: var(--text-muted);
+  margin: 0 0 10px;
+  font-family: var(--font-mono);
+}
+
+.profile-photo-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-width: 290px;
+}
+
+.profile-photo-actions .form-hint {
+  flex-basis: 100%;
+  margin: 0;
+}
+
+/* --- Details and actions, side by side ---------------------------------- */
+
+.profile-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1.9fr) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+/* A description list, because that is what this is: terms and their values. */
+.detail-list {
+  display: grid;
+  gap: 1px;
+  margin: 0;
+  background: var(--border);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  overflow: hidden;
+}
+
+.detail-list > div {
+  display: grid;
+  grid-template-columns: minmax(130px, 32%) 1fr;
+  gap: 14px;
+  padding: 11px 14px;
+  background: var(--surface);
+}
+
+.detail-list dt {
+  color: var(--text-muted);
+  font-size: .78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  align-self: center;
+}
+
+.detail-list dd {
+  margin: 0;
+  font-size: .89rem;
+  color: var(--ink-800);
+  overflow-wrap: anywhere;
+  align-self: center;
+}
+
+.profile-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* --- The identity cell in the list -------------------------------------- */
+
+/* The way into a profile. A button rather than a link because it switches a
+   section rather than navigating, and it has to be reachable by keyboard. */
+.identity {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  padding: 2px;
+  background: none;
+  border: 0;
+  border-radius: var(--r-xs);
+  font: inherit;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+  transition: var(--t);
+}
+
+.identity:hover .cell-primary,
+.identity:focus-visible .cell-primary {
+  color: var(--primary-deep);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.identity:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--primary-100);
+}
+
+.identity-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* Shows initials until a picture arrives, and keeps its size either way so the
+   row never reflows as thumbnails load in. */
+.identity-avatar {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: linear-gradient(140deg, var(--primary-500), var(--primary-700));
+  color: #fff;
+  font-size: .72rem;
+  font-weight: 700;
+  transition: transform var(--t);
+}
+
+.identity-avatar::before {
+  content: attr(data-initials);
+}
+
+.identity-avatar.has-photo {
+  background: var(--ink-100);
+}
+
+.identity-avatar.has-photo::before {
+  content: none;
+}
+
+.identity-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.identity:hover .identity-avatar {
+  transform: scale(1.06);
+}
+
+@media (max-width: 860px) {
+
+  .profile-columns {
+    grid-template-columns: 1fr;
+  }
+
+  .profile-head {
+    align-items: flex-start;
+  }
+
+  .detail-list > div {
+    grid-template-columns: 1fr;
+    gap: 3px;
+  }
+}
+
+/* ==========================================================================
    Row actions
 
    A row with six buttons in it is not a table, it is a toolbar with data

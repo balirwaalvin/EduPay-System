@@ -74,18 +74,18 @@ suite('EduPay payroll workflow', () => {
         const db = require('../server/db');
         const { migrate } = require('../server/migrate');
 
-        // Apply the schema if this database is empty.
-        const hasSchema = Number(await db.scalar(
-            `SELECT count(*) AS count FROM information_schema.tables
-              WHERE table_schema = 'public' AND table_name = 'users'`
-        ));
-        if (!hasSchema) await migrate();
+        /* Always migrate. This used to run only when the database was empty,
+           which meant that once `users` existed no later migration was ever
+           applied — a new table would simply be missing and every test that
+           touched it failed with "relation does not exist". The runner records
+           what it has applied, so calling it each time is cheap and correct. */
+        await migrate();
 
         // Reset to a known state. TRUNCATE CASCADE also resets the sequences.
         await db.execute(`
             TRUNCATE payroll_versions, payroll_items, payroll, leave_requests, advance_requests,
                      notifications, audit_log, password_resets, teachers, accountants,
-                     users, salary_structures, system_config, counters
+                     user_avatars, users, salary_structures, system_config, counters
             RESTART IDENTITY CASCADE
         `);
 
@@ -664,6 +664,98 @@ suite('EduPay payroll workflow', () => {
         assert.ok(!/mfaSecret|passwordSetupTokenHash/.test(serialised), 'secrets must not be exported');
         assert.ok(res.body.users.length > 0);
         assert.ok(res.body.payroll.length > 0);
+    });
+
+    test('only an administrator can set a profile picture', async () => {
+        // A 1x1-too-small PNG would be rejected on its dimensions, so this is a
+        // legitimate 64x64 one: every refusal below is about who is asking,
+        // never about what they sent.
+        const png = Buffer.alloc(24);
+        Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(png, 0);
+        png.writeUInt32BE(13, 8);
+        png.write('IHDR', 12, 'ascii');
+        png.writeUInt32BE(64, 16);
+        png.writeUInt32BE(64, 20);
+        const image = `data:image/png;base64,${Buffer.concat([png, Buffer.alloc(64)]).toString('base64')}`;
+
+        const adminSession = await login(admin.username, admin.password);
+        const target = (await call('/admin/users?role=hr', { token: adminSession.token })).body[0];
+
+        // The administrator may.
+        const set = await call(`/admin/users/${target.id}/avatar`, {
+            method: 'PUT', token: adminSession.token, body: { image }
+        });
+        assert.equal(set.status, 200, `administrator was refused: ${JSON.stringify(set.body)}`);
+        assert.ok(set.body.avatar.startsWith('data:image/png;base64,'));
+
+        // Nobody else may — including the account whose own picture it is.
+        for (const actor of [hr, accountant, teacher]) {
+            const session = await login(actor.username, actor.password);
+
+            const put = await call(`/admin/users/${target.id}/avatar`, {
+                method: 'PUT', token: session.token, body: { image }
+            });
+            assert.equal(put.status, 403, `${actor.username} was allowed to upload`);
+
+            const del = await call(`/admin/users/${target.id}/avatar`, {
+                method: 'DELETE', token: session.token
+            });
+            assert.equal(del.status, 403, `${actor.username} was allowed to delete`);
+        }
+
+        // And not without a token at all.
+        const anonymous = await call(`/admin/users/${target.id}/avatar`, { method: 'PUT', body: { image } });
+        assert.equal(anonymous.status, 401);
+
+        // It is really stored, and the list reports it.
+        const profile = await call(`/admin/users/${target.id}`, { token: adminSession.token });
+        assert.equal(profile.status, 200);
+        assert.ok(profile.body.avatar, 'the picture did not persist');
+
+        const list = await call('/admin/users?role=hr', { token: adminSession.token });
+        assert.equal(list.body.find(u => u.id === target.id).hasAvatar, true);
+
+        // Removing it leaves the account intact.
+        const removed = await call(`/admin/users/${target.id}/avatar`, {
+            method: 'DELETE', token: adminSession.token
+        });
+        assert.equal(removed.status, 200);
+
+        const after = await call(`/admin/users/${target.id}`, { token: adminSession.token });
+        assert.equal(after.body.avatar, null);
+        assert.equal(after.body.username, target.username, 'the account itself must survive');
+    });
+
+    test('a profile picture is deleted with its account, not left orphaned', async () => {
+        const session = await login(admin.username, admin.password);
+
+        const created = await call('/admin/users', {
+            method: 'POST', token: session.token,
+            body: { role: 'accountant', username: 'avatar.temp', fullName: 'Avatar Temp', email: 'avatar.temp@edupay.local' }
+        });
+        assert.equal(created.status, 201, JSON.stringify(created.body));
+        const id = created.body.userId;
+
+        const png = Buffer.alloc(24);
+        Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(png, 0);
+        png.writeUInt32BE(13, 8);
+        png.write('IHDR', 12, 'ascii');
+        png.writeUInt32BE(64, 16);
+        png.writeUInt32BE(64, 20);
+
+        await call(`/admin/users/${id}/avatar`, {
+            method: 'PUT', token: session.token,
+            body: { image: `data:image/png;base64,${Buffer.concat([png, Buffer.alloc(64)]).toString('base64')}` }
+        });
+
+        const gone = await call(`/admin/users/${id}`, { method: 'DELETE', token: session.token });
+        assert.equal(gone.status, 200, JSON.stringify(gone.body));
+
+        // ON DELETE CASCADE is what makes this true; without it the row would
+        // linger with a dangling user_id.
+        const orphans = await require('../server/db')
+            .scalar('SELECT count(*)::int FROM user_avatars WHERE user_id = $1', [id]);
+        assert.equal(orphans, 0, 'the picture outlived the account it belonged to');
     });
 
     test('signing out revokes the token', async () => {

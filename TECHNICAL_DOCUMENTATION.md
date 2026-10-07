@@ -478,6 +478,62 @@ action is consequential.
 `background-attachment`, so a clipped column reads as "there is more" rather
 than as a broken layout — and it needs no script.
 
+### Staff profiles and pictures
+
+A row in the account list is a summary; the profile behind it is the account in
+full. Opening a name switches to the `staffProfile` section — a section like any
+other, so it inherits the dashboard chrome, the entrance motion, and the Back
+button, and nothing had to be written for any of them.
+
+The URL carries the record: `#staffProfile/14`. `switchSection(id, param)` puts
+the parameter in the hash and passes it to `section:shown`, so a reload lands
+back on the same profile and the link can be shared.
+
+**Only an administrator can set a picture.** There is deliberately no route by
+which an account sets its own: all three endpoints hang off the admin router,
+which begins `authorizeRoles('admin')`. An integration test asserts that HR, an
+accountant and a teacher each get 403 on upload and delete — including the
+account whose own picture it is — and that an anonymous caller gets 401.
+
+#### Where the bytes live
+
+In Postgres, in `user_avatars`, not on disk. The deployment target is Cloud Run,
+where the filesystem is ephemeral and per-instance: a file written during an
+upload is gone on the next deploy and invisible to every other instance. It is
+its own table rather than a column on `users`, because that row is read on every
+authenticated request and almost none of them want an image.
+
+A picture is returned as a `data:` URL inside the JSON that asked for it. The
+obvious alternative — an `/avatars/14.jpg` route — does not work here, because
+the browser does not attach the bearer token to an `<img src>`; it would have had
+to be an unauthenticated route. The content security policy already allows
+`data:`, so nothing had to be loosened.
+
+The account list carries only `hasAvatar`, never the image: 2000 accounts of
+base64 would be a response measured in megabytes. Thumbnails are fetched after
+the fact and cached per account.
+
+#### Nothing the client says is believed
+
+The browser resizes to a 512×512 square and re-encodes as JPEG before uploading.
+That keeps the request small and strips EXIF — which, for a photo off a phone,
+includes the GPS coordinates of wherever it was taken.
+
+None of that is trusted. `avatars.js` reads the **content type and the
+dimensions back out of the file's own header** and measures the length; a PNG
+announced as a JPEG is stored as a PNG, and a text file announced as an image is
+rejected. Three formats are accepted, each of which a browser renders natively
+and carries its dimensions readably. **SVG is deliberately not among them** — it
+is a document that can carry script.
+
+The same limits appear in three places and must agree: the CHECK constraints in
+`002_user_avatars.sql`, the constants in `avatars.js`, and the body-parser
+ceiling in `server.js`. A 256 KiB image is ~342 KiB once base64-encoded, so the
+avatar route is given its own `512kb` parser mounted **before** the global
+`256kb` one — body-parser skips a request another parser has already read, so
+avatars get the larger ceiling and nothing else is loosened. `tests/avatars.test.js`
+asserts the service constants still match the schema.
+
 ### Crowded tables: chips and a row menu
 
 The staff list needed **1351px to show 1106px** of content. Three controls sat
@@ -816,6 +872,28 @@ every visit.
 | `INTERNAL_ERROR` | 500 | Detail is logged, not returned |
 
 ---
+
+### Two ordering bugs worth remembering
+
+**A section restored from the URL loaded no data.** Every dashboard bootstraps as
+`initDashboard(); buildTables(); wireForms();`, and it is `wireForms` that
+subscribes to `section:shown` to load a section's contents. `initDashboard`
+restored the section from the hash *immediately*, firing that event before
+anyone was listening — so reloading on `#staff` showed the right section with an
+empty table, and had done since the hash routing was added. The restore now runs
+in a `queueMicrotask`, after the caller's synchronous bootstrap has finished.
+
+**The test harness stopped applying migrations.** Both database suites ran
+`migrate()` only when the database was empty:
+
+```js
+if (!hasSchema) await migrate();        // wrong
+```
+
+Once `users` existed, every later migration was skipped forever, so a new table
+was simply absent and every test touching it failed with "relation does not
+exist". They now always call `migrate()`, which is idempotent — the runner
+records what it has applied.
 
 ## 9. Testing
 

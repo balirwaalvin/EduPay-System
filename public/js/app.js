@@ -296,7 +296,18 @@ function closeTopModal() {
    Navigation
    -------------------------------------------------------------------------- */
 
-function switchSection(sectionId) {
+/**
+ * Show a section.
+ *
+ * `param` is for a section that shows one record — a profile, say. It rides in
+ * the hash as `#section/param` so the page survives a reload and the link can
+ * be shared, and arrives at the listener in `section:shown`.
+ *
+ * A section with no nav item is legitimate: a detail view is reached by opening
+ * a record, not from the sidebar. Such a section carries its own
+ * `data-title`, since there is no nav item to take one from.
+ */
+function switchSection(sectionId, param = null) {
     document.querySelectorAll('.page-section').forEach(section => {
         const active = section.id === sectionId;
         section.classList.toggle('active', active);
@@ -310,20 +321,36 @@ function switchSection(sectionId) {
         item.setAttribute('aria-current', active ? 'page' : 'false');
     });
 
-    const title = document.querySelector(`.nav-item[data-section="${sectionId}"]`)?.dataset.title;
+    const title = document.querySelector(`.nav-item[data-section="${sectionId}"]`)?.dataset.title
+        || document.getElementById(sectionId)?.dataset.title;
     const heading = document.getElementById('pageTitle');
     if (heading && title) heading.textContent = title;
 
     if (isDrawerLayout()) closeSidebar();
 
     // Reflect the section in the URL so Back works and links are shareable.
-    if (window.location.hash !== `#${sectionId}`) {
-        history.replaceState(null, '', `#${sectionId}`);
+    const hash = param ? `#${sectionId}/${encodeURIComponent(param)}` : `#${sectionId}`;
+    if (window.location.hash !== hash) {
+        history.replaceState(null, '', hash);
     }
 
     staggerSection(document.getElementById(sectionId));
 
-    document.dispatchEvent(new CustomEvent('section:shown', { detail: { sectionId } }));
+    document.dispatchEvent(new CustomEvent('section:shown', { detail: { sectionId, param } }));
+}
+
+/** Split `#section/param` into its two parts. */
+function readHashRoute() {
+    const raw = window.location.hash.replace(/^#/, '');
+    if (!raw) return { sectionId: null, param: null };
+
+    const slash = raw.indexOf('/');
+    if (slash === -1) return { sectionId: raw, param: null };
+
+    return {
+        sectionId: raw.slice(0, slash),
+        param: decodeURIComponent(raw.slice(slash + 1))
+    };
 }
 
 function openSidebar() {
@@ -1376,13 +1403,24 @@ function initDashboard({ role, onSection } = {}) {
 
     if (onSection) document.addEventListener('section:shown', (event) => onSection(event.detail.sectionId));
 
-    // Restore the section named in the URL.
-    const fromHash = window.location.hash.replace('#', '');
-    if (fromHash && document.getElementById(fromHash)) switchSection(fromHash);
-    else {
-        const first = document.querySelector('.nav-item')?.dataset.section;
-        if (first) switchSection(first);
-    }
+    /* Restore the section named in the URL, including the record it was
+       showing — but not yet.
+
+       Every dashboard bootstraps as `initDashboard(); buildTables();
+       wireForms();`, and it is wireForms that subscribes to `section:shown` to
+       load a section's data. Restoring here and now would fire that event
+       before anyone was listening, so a reload on #staff showed the right
+       section with an empty table. A microtask runs once the caller's
+       synchronous bootstrap has finished, by which time the listener exists. */
+    queueMicrotask(() => {
+        const route = readHashRoute();
+        if (route.sectionId && document.getElementById(route.sectionId)) {
+            switchSection(route.sectionId, route.param);
+        } else {
+            const first = document.querySelector('.nav-item')?.dataset.section;
+            if (first) switchSection(first);
+        }
+    });
 
     initChangePasswordForm();
     return true;

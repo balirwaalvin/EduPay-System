@@ -119,6 +119,14 @@ app.use(cors({
     maxAge: 600
 }));
 
+/* A picture arrives as a base64 `data:` URL inside JSON, and base64 costs a
+   third: the 256 KiB image the avatar table accepts is ~342 KiB on the wire.
+   Without this the global limit below would reject a legal upload before the
+   route ever saw it, with a body-parser error rather than a useful message.
+   Mounted first because body-parser skips a request another parser has already
+   read, so this wins for avatars and nothing else is loosened. */
+app.use('/api/admin/users/:id/avatar', express.json({ limit: '512kb' }));
+
 app.use(express.json({ limit: '256kb' }));
 app.use(express.urlencoded({ extended: false, limit: '256kb' }));
 
